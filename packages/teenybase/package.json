@@ -1,0 +1,110 @@
+{
+    "name": "teenybase",
+    "version": "0.0.16",
+    "type": "module",
+    "bin": {
+        "teeny": "bin/teeny.js",
+        "teenybase": "bin/teeny.js"
+    },
+    "scripts": {
+        "build": "npm run build-ts && npm run ts-node && npm run js-node",
+        "test": "npm run check && npm run vitest && npm run test-check && npm run vitest-worker",
+        "watch": "concurrently -n \"r,ts,js\" \"npm run build-ts -- -w --preserveWatchOutput\" \"npm run ts-node -- -w --preserveWatchOutput\" \"npm run js-node -- --watch\"",
+        "run-pack": "npm pack",
+        "prepare": "npm run build",
+        "prepublishOnly": "npm run test",
+        "vitest": "vitest run --exclude test/worker --exclude test/cli-proxy.test.ts --exclude test/cli-managed.test.ts",
+        "vitest-worker": "vitest run -r test/worker",
+        "vitest-init": "npm run test-init && bash scripts/test-init-dev.sh --ci",
+        "check": "tsc -p tsconfig.json --pretty --noEmit && tsc -p backend/tsconfig.json --pretty --noEmit",
+        "build-ts": "tsc -p tsconfig.json --pretty",
+        "ts-node": "tsc -p src/node/tsconfig.json --pretty",
+        "js-node": "esbuild src/node/cli.ts --bundle --outfile=dist/node/cli.js --platform=node --format=esm --packages=external --sourcemap",
+        "test-check": "tsc -p test/tsconfig.json --pretty --noEmit",
+        "run-publish": "git diff --exit-code --name-only origin/master * && npm publish && git tag v$npm_package_version && git push --tags"
+    },
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./worker": {
+            "import": {
+                "types": "./dist/worker/index.d.ts",
+                "default": "./dist/worker/index.js"
+            }
+        },
+        "./node/*": {
+            "import": {
+                "types": "./dist/node/*.d.ts",
+                "default": "./dist/node/*.js"
+            }
+        },
+        "./scaffolds/*": {
+            "import": {
+                "types": "./dist/scaffolds/*.d.ts",
+                "default": "./dist/scaffolds/*.js"
+            }
+        },
+        "./package.json": "./package.json"
+    },
+    "dependencies": {
+        "@asteasolutions/zod-to-openapi": "^8.4.3",
+        "@cloudflare/workers-types": "^4.20260210.0",
+        "@hono/swagger-ui": "^0.5.3",
+        "@hono/zod-openapi": "^1.2.1",
+        "@hono/zod-validator": "^0.7.6",
+        "@tsndr/cloudflare-worker-jwt": "^3.2.1",
+        "@types/prompts": "^2.4.9",
+        "cac": "^6.7.14",
+        "dotenv": "^17.2.4",
+        "hono": "^4.11.9",
+        "jsep": "^1.4.0",
+        "jsonc-parser": "^3.3.1",
+        "md5-file": "^5.0.0",
+        "picocolors": "^1.1.1",
+        "prompts": "^2.4.2",
+        "smol-toml": "^1.6.0",
+        "workerd": "^1.20260402.1",
+        "wrangler": "^4.63.0"
+    },
+    "peerDependencies": {
+        "@cloudflare/workers-types": "^4.20260210.0",
+        "hono": "^4.11.9",
+        "wrangler": "^4.63.0"
+    },
+    "files": [
+        "bin",
+        "dist",
+        ".claude-plugin",
+        "docs",
+        "skills",
+        "README.md",
+        "LICENSE",
+        "package.json",
+        "tsconfig.json"
+    ],
+    "devDependencies": {
+        "@cloudflare/vitest-pool-workers": "^0.12.10",
+        "@types/node": "^22.5.0",
+        "concurrently": "^9.2.1",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.1",
+        "vitest": "3.2.4"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/teenybase/teenybase"
+    },
+    "author": "repalash <palash@shaders.app>",
+    "license": "Apache-2.0",
+    "bugs": {
+        "url": "https://github.com/teenybase/teenybase/issues"
+    },
+    "engines": {
+        "node": ">=18.14.1"
+    },
+    "homepage": "https://teenybase.com"
+}

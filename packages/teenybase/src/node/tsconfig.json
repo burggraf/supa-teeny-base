@@ -1,0 +1,14 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "moduleResolution": "bundler",
+        "types": [
+            "node",
+            "@cloudflare/workers-types"
+        ],
+        "declarationDir": "../../dist",
+        "emitDeclarationOnly": true
+    },
+    "include": ["./**/*.ts", "../src/*.d.ts"],
+    "exclude": ["../node_modules"]
+}

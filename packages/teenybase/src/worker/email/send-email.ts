@@ -1,0 +1,155 @@
+import {MailgunHelper, MailgunProps} from './mailgun'
+import {replaceTemplateVariables} from '../util/replaceTemplateVariables'
+import {HTTPException} from 'hono/http-exception'
+import {baseLayout1} from './templates/base-layout-1'
+import {messageLayout1} from './templates/message-layout-1'
+import {actionLinkTemplate} from './templates/action-link'
+import {actionTextTemplate} from './templates/action-text'
+import {MailgunBindings} from '../../types/mailgun'
+import {$DBExtension} from '../$DBExtension'
+import {$Database} from '../$Database'
+import {$Env} from '../env'
+import {ResendHelper, ResendProps} from './resend'
+import {HttpRoute} from '../../types/route'
+
+export interface SendEmailProps {
+    from: string,
+    to: string,
+    subject: string,
+    html: string,
+    variables: Record<string, string | number | boolean>,
+    tags: string[]
+}
+
+export interface BaseTemplateProps {
+    company_name: string,
+    company_url: string,
+    company_address: string,
+    company_copyright: string,
+    support_email: string,
+
+    [key: string]: string,
+}
+
+export interface ActionLinkProps {
+    message_title: string,
+    message_description: string,
+    message_footer: string,
+    action_link: string,
+    action_text?: string,
+    action_text_color?: string
+    action_button_color?: string
+}
+
+export interface ActionTextProps {
+    message_title: string,
+    message_description: string,
+    message_footer: string,
+    action_text: string,
+    action_text_color?: string
+    action_button_color?: string
+}
+
+export function buildEmailTemplate(templates: string[]) {
+    return templates.reduce((acc, t) => acc.replace('{{EMAIL_CONTENT}}', t), '{{EMAIL_CONTENT}}')
+}
+
+export class EmailSendClient<T extends $Env = $Env> implements $DBExtension<T> {
+    private mg: MailgunHelper | null
+    private rd: ResendHelper | null
+    private mock: boolean
+
+    routes: HttpRoute[] = []
+
+    constructor(private readonly db: $Database<T>, private props: Partial<SendEmailProps> & {
+        variables: BaseTemplateProps
+    }, mg?: MailgunProps, rd?: ResendProps, mock = false) {
+        // super(db)
+        this.mg = mg ? new MailgunHelper(mg) : null
+        this.rd = rd ? new ResendHelper(rd) : null
+        this.mock = mock
+        // todo also make a webhook that logs everything to an r2 bucket with encryption
+        this.mg && this.routes.push(...this.mg.getRoutes(this.db.c))
+        this.rd && this.routes.push(...this.rd.getRoutes(this.db.c))
+    }
+
+    templates = {
+        actionLink: [baseLayout1, messageLayout1, actionLinkTemplate],
+        actionText: [baseLayout1, messageLayout1, actionTextTemplate],
+    }
+
+    private resolveTemplates(layoutHtml: string | string[] | undefined, defaultTemplates: string[]): string[] {
+        if (!layoutHtml) return defaultTemplates
+        if (Array.isArray(layoutHtml)) return layoutHtml
+        // Full HTML document — use as-is; fragment — wrap in base + message layouts
+        if (/^\s*(<html|<!doctype)/i.test(layoutHtml)) return [layoutHtml]
+        return [baseLayout1, messageLayout1, layoutHtml]
+    }
+
+    sendActionLink(prop: Partial<SendEmailProps> & { variables: ActionLinkProps }, layoutHtml?: string | string[]) {
+        if (!prop.variables.action_link) throw new Error('action_link is required')
+        if (!prop.variables.action_text) prop.variables.action_text = 'Click here'
+        return this.sendEmail({
+            html: buildEmailTemplate(this.resolveTemplates(layoutHtml, this.templates.actionLink)),
+            ...prop,
+            tags: ['action-link', ...(prop.tags || [])],
+        })
+    }
+
+    sendActionText(prop: Partial<SendEmailProps> & { variables: ActionLinkProps }, layoutHtml?: string | string[]) {
+        if (!prop.variables.action_text) throw new Error('action_text is required')
+        return this.sendEmail({
+            html: buildEmailTemplate(this.resolveTemplates(layoutHtml, this.templates.actionText)),
+            ...prop,
+            tags: ['action-text', ...(prop.tags || [])],
+        })
+    }
+
+    sendEmail(prop: Partial<SendEmailProps>) {
+        const props = {
+            ...this.props,
+            ...prop,
+            variables: {
+                ...this.props.variables,
+                ...prop.variables,
+            } as any | undefined,
+            tags: [...(this.props.tags || []), ...(prop.tags || [])],
+        }
+        if (!props.html) throw new Error('html is required')
+        if (!props.subject) throw new Error('html is required')
+        if (props.variables) {
+            props.html = replaceTemplateVariables(props.html, props.variables, 3)
+            props.subject = replaceTemplateVariables(props.subject, props.variables, 2)
+            delete props.variables
+        }
+        if (!props.to) throw new Error('to is required')
+        if (!props.subject) throw new Error('subject is required')
+        if (!props.from) throw new Error('from is required')
+
+        // todo make it a config parameter like mock emails.
+        if(this.mock || props.to.match(/^e2e-.*@teenybase\.work$/)){
+            console.log(`[MockEmail] to=${props.to} subject="${props.subject}"`)
+            this.db.c.header('X-Mock-Email', JSON.stringify({to: props.to, subject: props.subject, html: props.html}), {append: true})
+            return
+        }else if(this.mg){
+            return this.mg.sendEmail({
+                from: props.from,
+                html: props.html,
+                subject: props.subject,
+                tags: props.tags || [],
+                to: props.to,
+            })
+        }else if(this.rd) {
+            return this.rd.sendEmail({
+                from: props.from,
+                html: props.html,
+                subject: props.subject,
+                tags: props.tags.map(t=>({name: t, value: 'true'})) || [],
+                to: props.to,
+            })
+        }else
+            throw new HTTPException(500, {message: 'Email provider not configured'})
+    }
+
+}
+
