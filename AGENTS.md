@@ -29,13 +29,25 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 - Teenybase native routes (`/api/v1/`) coexist unchanged
 - Opt-in via config flag `supabaseCompat: true`
 
+### Auth Architecture (Phase 2)
+
+- Extends existing Teenybase auth (`_auth_identities`, `SecretResolver`, `AuthContext`)
+- New D1 tables: `auth_sessions` (refresh tokens), `auth_otps` (one-time tokens), `auth_rate_limits` (brute force protection)
+- JWT: HMAC-SHA256, secret from `SUPA_TEENY_JWT_SECRET` env var
+- Password hashing: bcrypt (pure-JS `bcryptjs` fallback for Workers)
+- Email/SMS: tokens stored in D1, **no actual sending** in v1. Use `auth.email.autoConfirm: true` for tests.
+- Rate limiting: per-IP/email tracking in `auth_rate_limits` table
+- PKCE: store `code_challenge` in `auth_otps`, verify `SHA256(verifier)` on exchange
+- Admin routes require `service_role` key (bypasses RLS)
+
 ## Testing Rules
 
 - **TDD always.** Unit → Integration → E2E, in that order.
 - **Unit:** pure functions, no D1. Fast feedback.
 - **Integration:** `@cloudflare/vitest-pool-workers`, real D1, supabase-js client.
 - **E2E:** `wrangler dev` live server + supabase-js in Node process.
-- **Test fixtures** extracted from Supabase docs (see DATA.md extraction plan).
+- **Test fixtures** extracted from Supabase docs (see DATA.md, AUTH.md extraction plans).
+- **Auth tests:** set `auth.email.autoConfirm: true` to skip email sending. Seed bcrypt passwords via helper.
 
 ## Design Principles
 
@@ -45,9 +57,23 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 4. **service_role bypasses RLS.** Matches Supabase behavior.
 5. **Prefer headers control response.** `return=representation|minimal`, `count=exact|planned|estimated`.
 
+## Env Vars for Auth Testing
+
+| Variable | Purpose | Test Default |
+|---|---|---|
+| `SUPA_TEENY_JWT_SECRET` | JWT signing key | `"test-jwt-secret-at-least-32-chars!"` |
+| `SUPA_TEENY_JWT_EXPIRY` | Token lifetime (seconds) | `3600` |
+| `SUPA_TEENY_ANON_KEY` | Public anon key | `"sb-anon-test-key"` |
+| `SUPA_TEENY_SERVICE_KEY` | Service role key | `"sb-service-test-key"` |
+
 ## Error Mapping
 
 Map Teenybase errors to Supabase error codes (see PLAN.md Phase 0.4). Response shape: `{ message, code, details, hint }`.
+
+Auth-specific errors (see AUTH.md):
+- `weak_password` (422), `user_already_exists` (422), `invalid_credentials` (400)
+- `otp_expired` (400), `session_not_found` (400), `invalid_token` (401)
+- `lockout_active` (429), `signup_disabled` (422)
 
 ## Skip List (v1)
 

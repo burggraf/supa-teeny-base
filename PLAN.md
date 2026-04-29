@@ -348,14 +348,233 @@ Implement: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
 
 ## Phase 2: GoTrue Auth API
 
-**See [AUTH.md](./AUTH.md)** — dedicated auth users table, JWT building, email flows, OAuth, PKCE, role injection into RLS.
+**See [AUTH.md](./AUTH.md)** — dedicated auth users table, JWT building, email flows, OTP, PKCE, rate limiting, admin API, role injection into RLS.
+
+### Sub-phase 2A: Foundation — Routing, JWT, Password Hashing
+
+#### 2A.1 — Auth Route Registration
+- `POST /auth/v1/signup` → create user
+- `POST /auth/v1/token` → authenticate (password/refresh_token/pkce grants)
+- `POST /auth/v1/otp` → send OTP/magic link
+- `POST /auth/v1/verify` → verify OTP/token
+- `POST /auth/v1/logout` → sign out
+- `GET /auth/v1/user` → get current user
+- `PUT /auth/v1/user` → update current user
+- `POST /auth/v1/reauthenticate` → reauth nonce
+- `POST /auth/v1/resend` → resend OTP
+- `POST /auth/v1/recover` → password recovery
+- `GET /auth/v1/settings` → project settings
+- Admin routes under `/auth/v1/admin/*` (service_role only)
+
+**Tests:** Integration — verify each route dispatches, returns correct status for unauthenticated access.
+
+#### 2A.2 — JWT Builder
+- HMAC-SHA256 signing via `SUPA_TEENY_JWT_SECRET` env var
+- Claims: `sub` (user UUID), `aud` (role), `role`, `email`, `phone`, `app_metadata`, `user_metadata`, `exp`, `iat`
+- `exp = iat + JWT_EXPIRY` (default 3600s)
+- Use `jose` or `@tsndoo/hono-jwt` library
+- Validate: signature, expiry, required claims
+
+**Tests:** Unit — encode, decode, expiry rejection, wrong-secret rejection. Integration — JWT from signup usable in `GET /auth/v1/user`.
+
+#### 2A.3 — Password Hashing
+- bcrypt hash on signup
+- bcrypt compare on password signin
+- Minimum length validation (default 6, configurable)
+
+**Tests:** Unit — hash produces valid bcrypt, compare matches/mismatches, weak password rejection.
+
+#### 2A.4 — Auth Context Middleware
+- Extract `apikey` header → resolve anon key or service role
+- Extract `Authorization: Bearer <jwt>` → decode, validate, extract claims
+- Populate `SupabaseAuthContext` on request context
+- `service_role` bypasses RLS, enables admin routes
+
+**Tests:** Unit — header parsing, role resolution. Integration — requests with different auth headers produce correct context.
+
+### Sub-phase 2B: Signup + Email Confirmation
+
+#### 2B.1 — Email/Password Signup
+- Validate email format, password strength
+- Check duplicate email/phone
+- Generate user UUID (v4)
+- Hash password, store in D1 users table
+- Generate `confirmation_token`, store with expiry
+- If `email.confirmRequired = true`: return user, `session: null`
+- If `email.autoConfirm = true`: set `email_confirmed_at`, return user + session
+
+**Tests:** Integration — signup returns correct shape, duplicate rejection, weak password rejection. E2E — `supabase.auth.signUp()` flow.
+
+#### 2B.2 — Email Verification
+- `POST /auth/v1/verify` with token + type `signup`
+- Validate token, check expiry
+- Set `email_confirmed_at = NOW`
+- Create session, issue JWT + refresh token
+- Consume OTP record
+
+**Tests:** Integration — verify valid token creates session, expired token rejected. E2E — full signup→verify→signin flow.
+
+### Sub-phase 2C: Authentication (Sign In)
+
+#### 2C.1 — Password Sign In
+- `POST /auth/v1/token?grant_type=password`
+- Look up user by email or phone
+- bcrypt compare password
+- Create session (refresh token), issue JWT
+- Update `last_sign_in_at`
+
+**Tests:** Integration — correct credentials return session, wrong password returns `invalid_credentials`, user not found returns same error (no enumeration).
+
+#### 2C.2 — Anonymous Sign In
+- Generate random UUID user
+- No password, no email
+- `aud: "anon"`, `role: "anon"`
+- Return session with JWT
+
+**Tests:** Integration — anonymous user created, JWT has correct claims.
+
+#### 2C.3 — Refresh Token Exchange
+- `POST /auth/v1/token?grant_type=refresh_token`
+- Look up refresh token in `auth_sessions`
+- Check not revoked, not expired
+- **Single-use:** revoke old refresh token, issue new one
+- Issue new JWT with updated `exp`
+
+**Tests:** Integration — valid refresh token returns new session, revoked token rejected, old refresh token unusable after refresh.
+
+### Sub-phase 2D: OTP + Magic Links
+
+#### 2D.1 — OTP Send (Email)
+- `POST /auth/v1/otp` with email
+- Generate random 6-digit token
+- Store SHA256 hash in `auth_otps` with expiry
+- Return success (no actual email sent in v1)
+
+**Tests:** Integration — OTP record created in D1, rate limit enforced.
+
+#### 2D.2 — OTP Verification
+- `POST /auth/v1/verify` with token_hash + type
+- Lookup by hash, check expiry, check type match
+- Create session, issue JWT
+- Consume OTP record
+
+**Tests:** Integration — valid OTP creates session, expired OTP rejected, consumed OTP rejected.
+
+#### 2D.3 — Magic Links
+- OTP with type `magiclink`
+- Same flow as email OTP
+- Redirect URL included in verification response
+
+**Tests:** Integration — magiclink OTP stored, verified, redirects correctly.
+
+### Sub-phase 2E: PKCE Flow
+
+#### 2E.1 — PKCE Challenge Storage
+- OAuth/OTP signup stores `code_challenge` + `code_challenge_method` in `auth_otps`
+- S256 method only (SHA256 of verifier, base64url encoded)
+
+**Tests:** Unit — challenge derivation matches spec.
+
+#### 2E.2 — PKCE Token Exchange
+- `POST /auth/v1/token?grant_type=pkce`
+- Lookup `auth_code` in `auth_otps`
+- Verify `SHA256(code_verifier)` matches stored challenge
+- Create session, issue JWT
+
+**Tests:** Integration — correct verifier returns session, wrong verifier rejected, expired code rejected.
+
+### Sub-phase 2F: User Management
+
+#### 2F.1 — Get Current User
+- `GET /auth/v1/user` with JWT
+- Decode JWT, look up user by `sub`
+- Return user object
+
+**Tests:** Integration — valid JWT returns user, expired JWT returns 401.
+
+#### 2F.2 — Update User
+- `PUT /auth/v1/user` with JWT
+- Update email (with confirmation flow if changing)
+- Update password (rehash)
+- Update `user_metadata`
+- Return updated user
+
+**Tests:** Integration — update email, password, metadata. Verify old password no longer works after change.
+
+#### 2F.3 — Sign Out
+- `POST /auth/v1/logout` with JWT
+- Scope `global`: revoke all sessions for user
+- Scope `local`: revoke current session only
+- Scope `others`: revoke all other sessions
+
+**Tests:** Integration — global sign out revokes all tokens, local revokes current only.
+
+### Sub-phase 2G: Password Recovery
+
+#### 2G.1 — Recovery Request
+- `POST /auth/v1/recover` with email
+- Generate `recovery_token`, store with expiry
+- Return success (no email sent in v1)
+
+**Tests:** Integration — recovery token created, rate limit enforced.
+
+#### 2G.2 — Recovery Verification
+- Via `POST /auth/v1/verify` with type `recovery`
+- Validate token, create session
+- User can then `PUT /auth/v1/user` to set new password
+
+**Tests:** Integration — full recovery flow.
+
+### Sub-phase 2H: Rate Limiting & Security
+
+#### 2H.1 — Rate Limiter
+- Track attempts per identifier (IP/email) in `auth_rate_limits` D1 table
+- Configurable limits: signup (3/min), login (10/min), OTP (5/min)
+- After threshold: lockout for configurable duration (default 300s)
+
+**Tests:** Unit — rate limit check logic. Integration — rapid signups trigger rate limit, lockout enforced.
+
+### Sub-phase 2I: Admin API
+
+#### 2I.1 — Admin Auth Middleware
+- Require `service_role` key or admin JWT
+- Reject anon key access to admin routes
+
+**Tests:** Integration — anon key rejected from admin routes, service_role accepted.
+
+#### 2I.2 — Admin User CRUD
+- `POST /auth/v1/admin/users` → create user (with optional `email_confirm`)
+- `GET /auth/v1/admin/users` → list users (paginated)
+- `GET /auth/v1/admin/users/{uid}` → get user by ID
+- `PUT /auth/v1/admin/users/{uid}` → update user
+- `DELETE /auth/v1/admin/users/{uid}` → delete (soft or hard)
+
+**Tests:** Integration — full admin CRUD, pagination, soft delete.
+
+#### 2I.3 — Admin Generate Link
+- `POST /auth/v1/admin/generate_link`
+- Types: `signup`, `invite`, `magiclink`, `recovery`, `email_change`
+- Generate token, return action_link + email_otp + hashed_token
+
+**Tests:** Integration — each link type generates correct token and response shape.
+
+### Sub-phase 2J: Settings
+
+#### 2J.1 — Project Settings
+- `GET /auth/v1/settings`
+- Return configured OAuth providers (empty in v1), signup enabled flag, mailers
+
+**Tests:** Integration — returns correct settings object.
 
 Key compatibility requirements:
-- `POST /auth/v1/signup` → create user in `supa_auth_users`, send JWT
+- `POST /auth/v1/signup` → create user in D1, send JWT or null session (email confirm)
 - `POST /auth/v1/token` → password grant, refresh token, PKCE exchange
 - `GET/PUT /auth/v1/user` → current user management
 - JWT format matches Supabase: `HS256`, `aud` = role, `role` claim, `app_metadata`/`user_metadata`
 - JWT secret configurable via `SUPA_TEENY_JWT_SECRET` env var
+- Refresh tokens single-use, stored in D1 `auth_sessions`
+- OTP stored in D1 `auth_otps` (no actual email/SMS sending in v1)
+- Rate limiting via D1 `auth_rate_limits` table
 
 ---
 
@@ -425,14 +644,22 @@ packages/teenybase/src/
 │   │   │   └── errorMapper.ts             ← Teenybase errors → Supabase codes
 │   │   ├── auth/
 │   │   │   ├── router.ts                  ← /auth/v1/* dispatch
-│   │   │   ├── signup.ts
-│   │   │   ├── token.ts                   ← password/refresh_token/pkce grants
+│   │   │   ├── signup.ts                  ← POST /signup, email confirm flow
+│   │   │   ├── token.ts                   ← POST /token (password/refresh_token/pkce)
+│   │   │   ├── otp.ts                     ← POST /otp, POST /verify
 │   │   │   ├── user.ts                    ← GET/PUT /user
-│   │   │   ├── recover.ts                 ← password reset
-│   │   │   ├── verify.ts                  ← email verification
-│   │   │   ├── oauth.ts                   ← OAuth authorize/callback
-│   │   │   ├── jwtBuilder.ts              ← Supabase-compatible JWT
-│   │   │   └── pkce.ts                    ← PKCE verifier/challenge
+│   │   │   ├── recover.ts                 ← POST /recover, password reset
+│   │   │   ├── logout.ts                  ← POST /logout (global/local/others)
+│   │   │   ├── resend.ts                  ← POST /resend
+│   │   │   ├── settings.ts                ← GET /settings
+│   │   │   ├── admin/
+│   │   │   │   ├── users.ts               ← CRUD /admin/users
+│   │   │   │   └── generateLink.ts        ← /admin/generate_link
+│   │   │   ├── jwtBuilder.ts              ← Supabase-compatible JWT (HS256)
+│   │   │   ├── passwordHasher.ts          ← bcrypt hash + compare
+│   │   │   ├── sessionManager.ts          ← refresh token CRUD, single-use
+│   │   │   ├── rateLimiter.ts             ← per-IP/email rate limiting
+│   │   │   └── pkce.ts                    ← PKCE challenge/verifier
 │   │   ├── storage/
 │   │   │   ├── router.ts                  ← /storage/v1/* dispatch
 │   │   │   ├── buckets.ts                 ← bucket CRUD in D1
@@ -463,11 +690,25 @@ tests/
 │   │   ├── responseFormatter.test.ts
 │   │   ├── errorMapper.test.ts
 │   │   ├── policyParser.test.ts
-│   │   └── authContext.test.ts
+│   │   ├── authContext.test.ts            ← Header → SupabaseAuthContext
+│   │   ├── jwt.test.ts                    ← JWT encode/decode, claims, expiry
+│   │   ├── passwordHasher.test.ts         ← bcrypt hash + compare
+│   │   ├── sessionManager.test.ts         ← Session create/refresh/revoke
+│   │   ├── pkce.test.ts                   ← PKCE challenge/verifier
+│   │   └── rateLimiter.test.ts            ← Rate limit + lockout logic
 │   ├── integration/                       ← D1-backed tests via vitest-pool-workers
 │   │   ├── setup.ts                       ← Test Hono app with supabase compat
 │   │   ├── fixtures/
 │   │   │   ├── schemas/                   ← SQL seed scripts
+│   │   │   │   ├── characters.sql
+│   │   │   │   ├── countries.sql
+│   │   │   │   ├── cities.sql
+│   │   │   │   ├── instruments.sql
+│   │   │   │   ├── users.sql
+│   │   │   │   ├── issues.sql
+│   │   │   │   ├── classes.sql
+│   │   │   │   ├── texts.sql
+│   │   │   │   └── auth-users.sql         ← Pre-seeded auth users (bcrypt passwords)
 │   │   │   └── responses/                 ← Expected JSON responses
 │   │   ├── crud/
 │   │   │   ├── select.test.ts
@@ -490,18 +731,36 @@ tests/
 │   │   ├── rls/
 │   │   │   ├── policies.test.ts           ← CRUD + injection
 │   │   │   └── auth-functions.test.ts     ← auth.uid(), auth.role(), etc.
+│   │   ├── auth/
+│   │   │   ├── signup.test.ts             ← Email+password, confirm behavior
+│   │   │   ├── signin.test.ts             ← Password, OTP, anonymous
+│   │   │   ├── session.test.ts            ← getSession, refreshSession, setSession
+│   │   │   ├── user.test.ts               ← getUser, updateUser
+│   │   │   ├── signout.test.ts            ← global/local/others scope
+│   │   │   ├── events.test.ts             ← onAuthStateChange event flow
+│   │   │   ├── password-reset.test.ts     ← resetPasswordForEmail flow
+│   │   │   ├── otp.test.ts                ← verifyOtp types
+│   │   │   ├── pkce.test.ts               ← PKCE challenge → exchange
+│   │   │   ├── rate-limit.test.ts         ← Rate limit enforcement + lockout
+│   │   │   └── admin/
+│   │   │       ├── admin-users.test.ts    ← CRUD via admin API
+│   │   │       └── admin-links.test.ts    ← generateLink variants
 │   │   ├── prefer-headers.test.ts
 │   │   └── error-codes.test.ts
 │   ├── e2e/                               ← wrangler dev + supabase-js client
 │   │   ├── setup.ts                       ← Spawn wrangler dev, create client
 │   │   ├── crud.test.ts
 │   │   ├── filters.test.ts
-│   │   ├── auth.test.ts                   ← Phase 2
+│   │   ├── auth.test.ts                   ← Phase 2: signUp, signIn, user, signOut
+│   │   ├── admin-auth.test.ts             ← Phase 2: admin CRUD via service_role
+│   │   ├── rls-auth.test.ts               ← Phase 2: RLS policies with auth.uid()
 │   │   └── storage.test.ts                ← Phase 3
 │   └── helpers/
 │       ├── supabaseClient.ts              ← createClient(url, key)
 │       ├── seed.ts                        ← Run SQL fixtures
-│       └── compare.ts                     ← Deep-compare actual vs expected
+│       ├── compare.ts                     ← Deep-compare actual vs expected
+│       ├── authClient.ts                  ← createClient with auth config
+│       └── authSeed.ts                    ← Seed auth users in D1
 ```
 
 ---
