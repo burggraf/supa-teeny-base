@@ -35,7 +35,7 @@ Build a Supabase-compatible API layer on top of Teenybase, so that frontend code
 
 | Phase | Plan File | Scope | Est. Effort |
 |-------|-----------|-------|-------------|
-| 1 | [DATA.md](./DATA.md) | PostgREST + RLS policies + auth functions | 4-5 weeks |
+| 1 | [DATA.md](./DATA.md) | PostgREST + test suite + RLS policies | 4-5 weeks |
 | 2 | [AUTH.md](./AUTH.md) | GoTrue Auth + roles + JWT injection | 2-3 weeks |
 | 3 | [STORAGE.md](./STORAGE.md) | Supabase Storage REST API | 1-2 weeks |
 
