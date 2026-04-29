@@ -580,13 +580,243 @@ Key compatibility requirements:
 
 ## Phase 3: Storage API
 
-**See [STORAGE.md](./STORAGE.md)** — bucket/object CRUD on R2, signed URLs, public access.
+**See [STORAGE.md](./STORAGE.md)** — full Supabase Storage-compatible API on R2, signed URLs, public access, access control.
+
+### Sub-phase 3.1: Storage Routing + R2 Integration
+
+#### 3.1.1 — Route Registration
+- `GET /storage/v1/bucket/list` → listBuckets
+- `GET /storage/v1/bucket/{id}` → getBucket
+- `POST /storage/v1/bucket` → createBucket
+- `PUT /storage/v1/bucket/{id}` → updateBucket
+- `DELETE /storage/v1/bucket/{id}` → deleteBucket
+- `POST /storage/v1/bucket/{id}/empty` → emptyBucket
+- `POST /storage/v1/object/{bucket}` → upload (binary body)
+- `PUT /storage/v1/object/{bucket}` → update (binary body)
+- `GET /storage/v1/object/{bucket}/{path}` → download (binary response)
+- `HEAD /storage/v1/object/{bucket}/{path}` → exists (status only)
+- `DELETE /storage/v1/object/{bucket}` → remove (paths in body)
+- `POST /storage/v1/object/{bucket}/move` → move
+- `POST /storage/v1/object/{bucket}/copy` → copy
+- `POST /storage/v1/object/{bucket}/list` → list (offset pagination)
+- `POST /storage/v1/object/{bucket}/list/v2` → listV2 (cursor pagination)
+- `POST /storage/v1/object/sign/{bucket}` → createSignedUrl
+- `POST /storage/v1/object/signatures` → createSignedUrls (batch)
+- `POST /storage/v1/upload/resumable` → createSignedUploadUrl
+- `PUT /storage/v1/upload/resumable` → uploadToSignedUrl
+- `GET /storage/v1/object/sign/{bucket}/{path}` → signed URL download
+- `GET /storage/v1/object/public/{bucket}/{path}` → public URL download
+- `POST /storage/v1/object/info/{bucket}/{path}` → object info
+
+**Tests:** Integration — verify each route dispatches, returns correct status for missing bucket.
+
+#### 3.1.2 — R2 Client Integration
+- Use Cloudflare Workers `env.R2_BUCKET` binding
+- Helper layer: `putObject()`, `getObject()`, `headObject()`, `deleteObject()`, `listObjects()`, `copyObject()`
+- Map R2 responses → Supabase shapes
+- Handle R2 errors → Supabase error codes (`not_found`, `Duplicate`, etc.)
+
+**Tests:** Integration — upload/download binary content, verify R2 state.
+
+#### 3.1.3 — Storage Auth Middleware
+- Extract `apikey` + `Authorization` headers → `SupabaseAuthContext`
+- Public bucket: anon read access
+- Private bucket: authenticated owner or service_role
+- `service_role`: bypass all checks
+
+**Tests:** Unit — permission check logic. Integration — access control scenarios.
+
+### Sub-phase 3.2: D1 Bucket Metadata Schema
+
+#### 3.2.1 — Schema Migration
+```sql
+CREATE TABLE storage_buckets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  owner TEXT,
+  public INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  file_size_limit INTEGER,
+  allowed_mime_types TEXT
+);
+
+CREATE TABLE storage_objects (
+  id TEXT PRIMARY KEY,
+  bucket_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  owner TEXT,
+  metadata TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  last_accessed_at TEXT,
+  version TEXT
+);
+```
+
+**Tests:** Integration — schema creation, indexes.
+
+#### 3.2.2 — Bucket CRUD
+- Create: validate name, check duplicate, store in D1
+- List: query all buckets for current user (or all for service_role)
+- Get: single bucket by id
+- Update: modify public flag, size limit, MIME types
+- Delete: check empty first, then remove from D1 + R2
+- Empty: list all objects, delete from R2, remove from D1
+
+**Tests:** Integration — full bucket CRUD lifecycle.
+
+### Sub-phase 3.3: Object Operations
+
+#### 3.3.1 — Upload
+- Parse `x-upsert`, `x-cache-control`, `content-type`, `content-length` headers
+- Validate: size limit, MIME type against bucket config, path format
+- Write to R2 via `put()`, register in D1 `storage_objects`
+- Upsert mode: overwrite if exists
+
+**Tests:** Integration — upload text/binary, upsert, size limit, MIME rejection, path validation.
+
+#### 3.3.2 — Update
+- Same as upload but requires existing object
+- Overwrite R2 content, update D1 metadata
+
+**Tests:** Integration — update existing file, reject if not found.
+
+#### 3.3.3 — Download
+- Read from R2 via `get()`, return binary with correct headers
+- `Content-Type`, `Content-Length`, `Cache-Control`, `ETag`, `Last-Modified`
+- Access control check before serving
+
+**Tests:** Integration — download blob, verify content and headers.
+
+#### 3.3.4 — Remove
+- Accept paths array in JSON body
+- Delete from R2, remove from D1
+- Return array of deleted object names
+
+**Tests:** Integration — remove single/multiple files.
+
+#### 3.3.5 — Move
+- R2: copy to new key, delete old key
+- D1: update path, update `updated_at`
+- Verify source gone, destination exists
+
+**Tests:** Integration — move file, verify source deleted, destination present.
+
+#### 3.3.6 — Copy
+- R2: `copy()` or `get()` + `put()`
+- D1: new registry entry
+- Source remains intact
+
+**Tests:** Integration — copy file, verify both source and destination exist.
+
+### Sub-phase 3.4: Listing & Metadata
+
+#### 3.4.1 — List (v1)
+- `prefix`, `limit`, `offset` params
+- R2 `list()` + sort
+- Return objects + folders (`id: null` for folders)
+- Sort by name/size/created_at
+
+**Tests:** Integration — list root, subfolder, pagination, sort order.
+
+#### 3.4.2 — ListV2
+- Cursor-based pagination
+- Separate `objects` and `folders` arrays
+- `hasNext` / `nextCursor` response fields
+
+**Tests:** Integration — cursor pagination, folders vs objects separation.
+
+#### 3.4.3 — Info
+- R2 `head()` for metadata
+- Return: name, size, mimetype, cacheControl, lastModified, eTag
+
+**Tests:** Integration — info on uploaded file, verify all fields.
+
+#### 3.4.4 — Exists
+- `HEAD /storage/v1/object/{bucket}/{path}`
+- Return 200 if exists, 404 if not
+- No body — status only
+
+**Tests:** Integration — exists returns true/false via HEAD.
+
+### Sub-phase 3.5: Signed URLs
+
+#### 3.5.1 — Download Signed URL
+- Generate HMAC-SHA256 token (same secret as auth)
+- Token includes: bucket, path, expiry, download flag
+- Store token expiry in D1 for revocation (optional)
+- `GET .../sign/{bucket}/{path}?token=...` → validate + serve from R2
+
+**Tests:** Unit — token encode/decode, expiry validation. Integration — create signed URL, download via it, expired URL rejected, wrong signature rejected.
+
+#### 3.5.2 — Batch Signed URLs
+- `POST /storage/v1/object/signatures` → array of signed URLs
+- Return `{ url, signedURL, error }` per path
+
+**Tests:** Integration — batch creation, mixed valid/invalid paths.
+
+#### 3.5.3 — Signed Upload URL
+- `POST /storage/v1/upload/resumable` → generate upload token
+- Token includes `upsert` flag (baked in, cannot override)
+- `PUT /storage/v1/upload/resumable` with `x-upsert-token` header
+- Validate token, store file in R2
+
+**Tests:** Unit — upload token. Integration — create upload URL, upload via token, verify file stored. Upsert from token.
+
+### Sub-phase 3.6: Public URLs
+
+#### 3.6.1 — Public URL Builder
+- `getPublicUrl(path)` — **sync, client-side only**
+- No server API call needed
+- Construct URL: `{baseUrl}/storage/v1/object/public/{bucket}/{path}`
+
+**Tests:** Unit — URL construction for public bucket.
+
+### Sub-phase 3.7: Access Control
+
+#### 3.7.1 — Bucket-Level Permissions
+| Role | Public Bucket | Private Bucket |
+|---|---|---|
+| `anon` | Read objects, list | Denied |
+| `authenticated` | Read/write objects | Read/write if owner |
+| `service_role` | Full access | Full access |
+
+**Tests:** Integration — access public/private buckets with different auth levels.
+
+#### 3.7.2 — Object-Level Permissions
+- Upload: bucket exists + size limit + MIME + auth check
+- Download: public OR signed URL OR owner/service_role
+- Delete/Move/Copy: owner/service_role
+
+**Tests:** Integration — various permission scenarios, edge cases.
+
+### Sub-phase 3.8: File Size & MIME Enforcement
+
+#### 3.8.1 — Size Limit
+- Check `Content-Length` header before reading body
+- Reject early if exceeds bucket `file_size_limit`
+- Global cap from `storage.maxUploadSize` config
+
+**Tests:** Integration — upload exceeds limit → 413.
+
+#### 3.8.2 — MIME Validation
+- Check `Content-Type` against bucket `allowed_mime_types`
+- Reject if not in allowed list
+
+**Tests:** Integration — upload disallowed MIME → 422.
 
 Key compatibility requirements:
-- `PUT /storage/v1/object/{bucket}/{path}` → upload to R2
-- `GET /storage/v1/object/{bucket}/{path}` → download from R2
-- `POST /storage/v1/object/sign/{bucket}/{path}` → JWT-signed temporary URL
-- Bucket metadata in D1 `storage_buckets` table
+- `POST /storage/v1/object/{bucket}` → upload to R2 (binary body, `x-upsert` header)
+- `GET /storage/v1/object/{bucket}/{path}` → download from R2 (binary response)
+- `POST /storage/v1/object/sign/{bucket}` → JWT-signed temporary download URL
+- `POST /storage/v1/upload/resumable` → JWT-signed upload token
+- Bucket metadata in D1 `storage_buckets` table (public flag, size limit, MIME types)
+- Object metadata in D1 `storage_objects` table (path, size, MIME, owner)
+- `getPublicUrl()` and `toBase64()` are client-side sync utilities — no server code
+- Signed URLs use HMAC-SHA256 tokens (same secret as auth JWT)
+- `service_role` bypasses all storage access control
+- R2 is the actual file content store; D1 holds metadata only
 
 ---
 
@@ -660,16 +890,21 @@ packages/teenybase/src/
 │   │   │   ├── sessionManager.ts          ← refresh token CRUD, single-use
 │   │   │   ├── rateLimiter.ts             ← per-IP/email rate limiting
 │   │   │   └── pkce.ts                    ← PKCE challenge/verifier
-│   │   ├── storage/
+│   │   ├── storage/                       ← Phase 3: Supabase Storage compat
 │   │   │   ├── router.ts                  ← /storage/v1/* dispatch
-│   │   │   ├── buckets.ts                 ← bucket CRUD in D1
-│   │   │   ├── upload.ts
-│   │   │   ├── download.ts
-│   │   │   ├── list.ts
-│   │   │   ├── remove.ts
-│   │   │   ├── move.ts
-│   │   │   ├── copy.ts
-│   │   │   └── signedUrl.ts               ← JWT temporary URLs
+│   │   │   ├── buckets.ts                 ← bucket CRUD (D1 metadata + R2)
+│   │   │   ├── upload.ts                  ← upload binary to R2
+│   │   │   ├── download.ts                ← download binary from R2
+│   │   │   ├── list.ts                    ← list/listV2 objects
+│   │   │   ├── remove.ts                  ← delete objects
+│   │   │   ├── move.ts                    ← move objects (R2 copy+delete)
+│   │   │   ├── copy.ts                    ← copy objects
+│   │   │   ├── info.ts                    ← HEAD/info for object metadata
+│   │   │   ├── signedUrl.ts               ← HMAC signed URL tokens
+│   │   │   ├── signedUploadUrl.ts         ← signed upload URL tokens
+│   │   │   ├── publicUrl.ts               ← public URL builder (client-side)
+│   │   │   ├── validators.ts              ← path, MIME, size validation
+│   │   │   └── accessControl.ts           ← bucket/object permission checks
 │   │   ├── rls/
 │   │   │   ├── policyStore.ts             ← D1 CRUD for rls_policies
 │   │   │   ├── policyParser.ts            ← CREATE POLICY → internal format
@@ -695,7 +930,14 @@ tests/
 │   │   ├── passwordHasher.test.ts         ← bcrypt hash + compare
 │   │   ├── sessionManager.test.ts         ← Session create/refresh/revoke
 │   │   ├── pkce.test.ts                   ← PKCE challenge/verifier
-│   │   └── rateLimiter.test.ts            ← Rate limit + lockout logic
+│   │   ├── rateLimiter.test.ts            ← Rate limit + lockout logic
+│   │   ├── signedUrl.test.ts              ← Signed URL encode/decode, expiry
+│   │   ├── signedUploadUrl.test.ts        ← Upload token generation + validation
+│   │   ├── pathValidator.test.ts          ← Path name validation
+│   │   ├── mimeTypeValidator.test.ts      ← MIME type matching
+│   │   ├── fileSizeValidator.test.ts      ← Size limit enforcement
+│   │   ├── publicUrlBuilder.test.ts       ← getPublicUrl URL construction
+│   │   └── storageErrorMapper.test.ts     ← Storage errors → Supabase codes
 │   ├── integration/                       ← D1-backed tests via vitest-pool-workers
 │   │   ├── setup.ts                       ← Test Hono app with supabase compat
 │   │   ├── fixtures/
@@ -708,7 +950,8 @@ tests/
 │   │   │   │   ├── issues.sql
 │   │   │   │   ├── classes.sql
 │   │   │   │   ├── texts.sql
-│   │   │   │   └── auth-users.sql         ← Pre-seeded auth users (bcrypt passwords)
+│   │   │   │   ├── auth-users.sql         ← Pre-seeded auth users (bcrypt passwords)
+│   │   │   │   └── storage-buckets.sql    ← Pre-seeded storage buckets
 │   │   │   └── responses/                 ← Expected JSON responses
 │   │   ├── crud/
 │   │   │   ├── select.test.ts
@@ -745,22 +988,56 @@ tests/
 │   │   │   └── admin/
 │   │   │       ├── admin-users.test.ts    ← CRUD via admin API
 │   │   │       └── admin-links.test.ts    ← generateLink variants
+│   │   ├── storage/
+│   │   │   ├── buckets/
+│   │   │   │   ├── list.test.ts           ← listBuckets()
+│   │   │   │   ├── get.test.ts            ← getBucket()
+│   │   │   │   ├── create.test.ts         ← createBucket()
+│   │   │   │   ├── update.test.ts         ← updateBucket()
+│   │   │   │   ├── delete.test.ts         ← deleteBucket()
+│   │   │   │   └── empty.test.ts          ← emptyBucket()
+│   │   │   ├── objects/
+│   │   │   │   ├── upload.test.ts         ← upload()
+│   │   │   │   ├── update.test.ts         ← update()
+│   │   │   │   ├── download.test.ts       ← download()
+│   │   │   │   ├── remove.test.ts         ← remove()
+│   │   │   │   ├── move.test.ts           ← move()
+│   │   │   │   ├── copy.test.ts           ← copy()
+│   │   │   │   ├── list.test.ts           ← list() offset pagination
+│   │   │   │   ├── listV2.test.ts         ← listV2() cursor pagination
+│   │   │   │   ├── exists.test.ts         ← exists() HEAD
+│   │   │   │   └── info.test.ts           ← info()
+│   │   │   ├── signed-urls/
+│   │   │   │   ├── createSignedUrl.test.ts
+│   │   │   │   ├── createSignedUrls.test.ts
+│   │   │   │   ├── signedUrlAccess.test.ts
+│   │   │   │   ├── createSignedUploadUrl.test.ts
+│   │   │   │   └── uploadToSignedUrl.test.ts
+│   │   │   └── access-control/
+│   │   │       ├── public-bucket.test.ts
+│   │   │       ├── private-bucket.test.ts
+│   │   │       ├── owner-access.test.ts
+│   │   │       └── service-role-access.test.ts
 │   │   ├── prefer-headers.test.ts
 │   │   └── error-codes.test.ts
-│   ├── e2e/                               ← wrangler dev + supabase-js client
+│   │   ├── e2e/                               ← wrangler dev + supabase-js client
 │   │   ├── setup.ts                       ← Spawn wrangler dev, create client
 │   │   ├── crud.test.ts
 │   │   ├── filters.test.ts
 │   │   ├── auth.test.ts                   ← Phase 2: signUp, signIn, user, signOut
 │   │   ├── admin-auth.test.ts             ← Phase 2: admin CRUD via service_role
 │   │   ├── rls-auth.test.ts               ← Phase 2: RLS policies with auth.uid()
-│   │   └── storage.test.ts                ← Phase 3
+│   │   ├── storage.test.ts                ← Phase 3: full storage lifecycle
+│   │   └── storage-access-control.test.ts ← Phase 3: public/private bucket auth
 │   └── helpers/
 │       ├── supabaseClient.ts              ← createClient(url, key)
 │       ├── seed.ts                        ← Run SQL fixtures
 │       ├── compare.ts                     ← Deep-compare actual vs expected
 │       ├── authClient.ts                  ← createClient with auth config
-│       └── authSeed.ts                    ← Seed auth users in D1
+│       ├── authSeed.ts                    ← Seed auth users in D1
+│       ├── storageClient.ts               ← createClient with storage config
+│       ├── testFiles.ts                   ← Generate test file blobs
+│       └── compareStorage.ts              ← Compare storage responses
 ```
 
 ---

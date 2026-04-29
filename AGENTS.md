@@ -40,13 +40,24 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 - PKCE: store `code_challenge` in `auth_otps`, verify `SHA256(verifier)` on exchange
 - Admin routes require `service_role` key (bypasses RLS)
 
+### Storage Architecture (Phase 3)
+
+- **R2**: actual file content storage (binary objects, path = key)
+- **D1**: bucket metadata (`storage_buckets`) + object registry (`storage_objects`)
+- Bucket config: `public` flag, `fileSizeLimit`, `allowedMimeTypes`
+- Signed URLs: HMAC-SHA256 tokens (same secret as auth), short-lived
+- `getPublicUrl()` / `toBase64()`: client-side sync utilities — no server code needed
+- `service_role` bypasses all storage access control
+- Private buckets: authenticated owner or service_role required
+- Public buckets: anon can read and list
+
 ## Testing Rules
 
 - **TDD always.** Unit → Integration → E2E, in that order.
 - **Unit:** pure functions, no D1. Fast feedback.
 - **Integration:** `@cloudflare/vitest-pool-workers`, real D1, supabase-js client.
 - **E2E:** `wrangler dev` live server + supabase-js in Node process.
-- **Test fixtures** extracted from Supabase docs (see DATA.md, AUTH.md extraction plans).
+- **Test fixtures** extracted from Supabase docs (see DATA.md, AUTH.md, STORAGE.md extraction plans).
 - **Auth tests:** set `auth.email.autoConfirm: true` to skip email sending. Seed bcrypt passwords via helper.
 
 ## Design Principles
@@ -57,14 +68,15 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 4. **service_role bypasses RLS.** Matches Supabase behavior.
 5. **Prefer headers control response.** `return=representation|minimal`, `count=exact|planned|estimated`.
 
-## Env Vars for Auth Testing
+## Env Vars for Auth & Storage Testing
 
 | Variable | Purpose | Test Default |
 |---|---|---|
-| `SUPA_TEENY_JWT_SECRET` | JWT signing key | `"test-jwt-secret-at-least-32-chars!"` |
+| `SUPA_TEENY_JWT_SECRET` | JWT signing key / signed URL token | `"test-jwt-secret-at-least-32-chars!"` |
 | `SUPA_TEENY_JWT_EXPIRY` | Token lifetime (seconds) | `3600` |
 | `SUPA_TEENY_ANON_KEY` | Public anon key | `"sb-anon-test-key"` |
 | `SUPA_TEENY_SERVICE_KEY` | Service role key | `"sb-service-test-key"` |
+| `SUPA_TEENY_SIGNED_URL_EXPIRY` | Default signed URL lifetime (s) | `600` (10 min) |
 
 ## Error Mapping
 
@@ -74,6 +86,11 @@ Auth-specific errors (see AUTH.md):
 - `weak_password` (422), `user_already_exists` (422), `invalid_credentials` (400)
 - `otp_expired` (400), `session_not_found` (400), `invalid_token` (401)
 - `lockout_active` (429), `signup_disabled` (422)
+
+Storage-specific errors (see STORAGE.md):
+- `not_found` (404), `Duplicate` (400), `BucketNotEmpty` (400)
+- `ObjectNotFound` (404), `InvalidToken` (400), `PermissionDenied` (403)
+- `SizeLimitExceeded` (413), `MimeTypeNotAllowed` (422)
 
 ## Skip List (v1)
 
