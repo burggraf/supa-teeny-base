@@ -1,572 +1,510 @@
-# Phase 2: Supabase Auth (GoTrue) API Compatibility
+# AUTH.md: Test Suite Plan for Supabase Auth API Compatibility
 
 ## Goal
 
-Implement Supabase Auth API endpoints (`/auth/v1/*`) so that `supabase.auth.signUp()`, `signInWithPassword()`, `signInWithOAuth()`, etc. work against the D1 backend. The auth system reuses Teenybase's existing JWT, password hashing, email, and OAuth infrastructure but presents a GoTrue-compatible HTTP surface.
+Verify GoTrue-compatible Auth layer produces responses matching real Supabase. Every feature tested at 3 levels:
+- **Unit** — pure functions (JWT encoding/decoding, password hashing, email validation), no D1
+- **Integration** — real D1 via `@cloudflare/vitest-pool-workers`, supabase-js client against test Hono app
+- **E2E** — `wrangler dev` live server + `@supabase/supabase-js` client in Node
 
-## Supabase Auth API Surface
+Each test uses:
+- **supabase-js call** — exact code from Supabase docs
+- **expected response shape** — `{ data: { user, session }, error }` structure from Supabase docs
 
-```
-POST /auth/v1/signup              → email + password registration
-POST /auth/v1/token               → login (grant_type: password, refresh_token, pkce)
-POST /auth/v1/logout              → sign out
-POST /auth/v1/recover             → forgot password (sends email)
-POST /auth/v1/verify              → email/phone verification
-POST /auth/v1/invite              → invite user (admin)
-POST /auth/v1/admin/users         → CRUD users (service_role key)
-POST /auth/v1/admin/users/{id}    → update/delete user
-GET  /auth/v1/user                → get current user
-PUT  /auth/v1/user                → update current user
-GET  /auth/v1/sso                 → SSO providers
-GET  /auth/v1/sso/domains         → SSO domains
-POST /auth/v1/oauth/authorize     → start OAuth flow
-POST /auth/v1/oauth/token         → exchange OAuth code
-POST /auth/v1/reauthenticate      → require re-auth
-GET  /auth/v1/settings            → auth server settings
-```
+## Approach: Extract Tests from Supabase Docs
 
-## Tasks
+Auth docs pages have **interactive tabbed examples** showing different credential types, options, and response shapes. Unlike Data API pages (which include SQL data source + JSON response), Auth pages focus on:
+1. **Example code** — `supabase.auth.signUp({ email, password })`
+2. **Parameters** — credential object shapes, options
+3. **Return type** — Promise shapes, user/session objects
 
-### 2.1 Dedicated Auth Users Table
-Create the internal schema for the GoTrue-compatible users table in D1:
+We extract **example code** and **parameter/return shapes** to create test fixtures covering each tab variant.
 
-```sql
-CREATE TABLE supa_auth_users (
-    id TEXT PRIMARY KEY,           -- UUID
-    aud TEXT,                      -- audience
-    role TEXT DEFAULT 'authenticated',
-    email TEXT UNIQUE,
-    encrypted_password TEXT,       -- bcrypt/argon2 hash
-    email_confirmed_at DATETIME,
-    invited_at DATETIME,
-    confirmation_token TEXT,
-    confirmation_sent_at DATETIME,
-    recovery_token TEXT,
-    recovery_sent_at DATETIME,
-    email_change_token_new TEXT,
-    email_change TEXT,
-    email_change_sent_at DATETIME,
-    last_sign_in_at DATETIME,
-    raw_app_meta_data TEXT,        -- JSON
-    raw_user_meta_data TEXT,       -- JSON
-    is_super_admin BOOLEAN,
-    created_at DATETIME,
-    updated_at DATETIME,
-    phone TEXT,
-    phone_confirmed_at DATETIME,
-    phone_change TEXT,
-    phone_change_token TEXT,
-    phone_change_sent_at DATETIME,
-    email_change_token_current TEXT,
-    email_change_confirm_status INTEGER,
-    banned_until DATETIME,
-    reauthentication_token TEXT,
-    reauthentication_sent_at DATETIME,
-    is_sso_user BOOLEAN DEFAULT FALSE,
-    deleted_at DATETIME
-);
+### Extraction Script
 
-CREATE TABLE supa_auth_sessions (
-    id TEXT PRIMARY KEY,           -- UUID
-    user_id TEXT REFERENCES supa_auth_users(id),
-    not_after DATETIME,
-    refreshed_at DATETIME,
-    created_at DATETIME,
-    updated_at DATETIME
-);
-
-CREATE TABLE supa_auth_identities (
-    id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES supa_auth_users(id),
-    provider_id TEXT,
-    provider_name TEXT,            -- 'google', 'github', etc.
-    identity_data TEXT,            -- JSON
-    created_at DATETIME,
-    last_sign_in_at DATETIME,
-    updated_at DATETIME
-);
+```js
+// For each auth page:
+// 1. Navigate to URL
+// 2. Find all h2 headings (each = an auth method)
+// 3. For each heading, find all [role="tab"] elements
+// 4. Click each tab, extract example code
+// 5. Extract parameter descriptions and return type info
+// 6. Save as structured test fixtures
 ```
 
-**Output:** Migration to create tables. Can piggyback on Teenybase's existing migration system.
-**Difficulty:** Easy
-**Effort:** 1-2 days
-
-**Gotchas:**
-- Teenybase uses a per-table auth extension model. This new layer needs a standalone users table, separate from any Teenybase config tables.
-- Phone/SMS auth is out of scope for v1 (columns present but unused).
-
-### 2.2 Route Registration (`router.ts`)
-Register all `/auth/v1/*` routes on the Hono app:
-
-- `POST /auth/v1/signup`
-- `POST /auth/v1/token`
-- `POST /auth/v1/logout`
-- `POST /auth/v1/recover`
-- `POST /auth/v1/verify`
-- `GET /auth/v1/user`
-- `PUT /auth/v1/user`
-- `POST /auth/v1/invite`
-- `GET/POST /auth/v1/admin/users`
-- `GET/PATCH/DELETE /auth/v1/admin/users/{id}`
-- `POST /auth/v1/oauth/authorize`
-- `GET /auth/v1/oauth/callback`
-- `POST /auth/v1/reauthenticate`
-- `GET /auth/v1/settings`
-
-**Output:** Hono routes dispatching to individual handlers.
-**Difficulty:** Easy
-**Effort:** 1 day
-
-### 2.3 JWT Builder (`jwtBuilder.ts`)
-Generate Supabase-compatible JWTs with the correct claim structure:
-
-```json
-{
-  "aud": "authenticated",
-  "role": "authenticated",
-  "email": "user@example.com",
-  "phone": "",
-  "app_metadata": {
-    "provider": "email",
-    "providers": ["email"]
-  },
-  "user_metadata": {
-    "name": "John",
-    "avatar_url": "..."
-  },
-  "sub": "<user-uuid>",
-  "iat": 1234567890,
-  "exp": 1234567890
-}
-```
-
-**Sub-tasks:**
-- Map Teenybase's existing JWT helper to produce these claims
-- `role` defaults to `authenticated` (or `anon` if not logged in)
-- `sub` = user UUID
-- `app_metadata.providers` array tracks all OAuth providers linked
-- `user_metadata` = free-form user properties from signup/update
-- Use HS256 algorithm (Supabase default)
-- Support configurable JWT expiry (default: 3600s for access, 30 days for refresh)
-
-**Output:** `buildSupabaseJWT(user, opts) → string`
-**Difficulty:** Medium
-**Effort:** 2-3 days
-
-**Gotchas:**
-- Teenybase may use different JWT claim names internally. Need a translation layer.
-- Supabase JS client validates the JWT structure in `getUser()`. If claims are missing, it fails.
-- Must use the same JWT secret as configured in the project settings.
-
-### 2.4 Session Management
-Track active sessions in D1 (`supa_auth_sessions` table):
-
-- Create session on login/signup
-- Track refresh token → session ID mapping
-- Support session expiry and max refresh count
-- Invalidate session on logout/password change
-
-**Sub-tasks:**
-- Generate refresh tokens (cryptographically secure, stored hashed)
-- Map refresh token to session ID on `grant_type: refresh_token`
-- Implement token rotation (new refresh token on each refresh)
-- Delete session on logout
-
-**Difficulty:** Medium
-**Effort:** 2-3 days
-
-**Gotchas:**
-- Teenybase already has session tracking in its auth extension. Can reuse or adapt that logic.
-- Supabase stores refresh tokens hashed (not plaintext). Must do the same for security.
-
-### 2.5 Sign Up (`signup.ts`)
-`POST /auth/v1/signup` with body: `{ email, password, data?: {...}, redirect_to?: string }`
-
-**Sub-tasks:**
-- Validate email format, check blocklist (reuse Teenybase logic)
-- Hash password with bcrypt/argon2 (reuse Teenybase's `passwordProcessors`)
-- Insert user into `supa_auth_users` table
-- Generate confirmation token if email confirmation required
-- Send confirmation email (reuse Teenybase email system)
-- Return `{ user: {...}, session: { access_token, refresh_token, ... } }` or just `{ user }` if email confirmation needed
-- Support `data` field for `user_metadata`
-
-**Output:** GoTrue-compatible response.
-**Difficulty:** Medium
-**Effort:** 2-3 days
-
-### 2.6 Token / Login (`token.ts`)
-`POST /auth/v1/token` with various `grant_type` values:
-
-#### `grant_type: password`
-Body: `{ email, password }`
-- Look up user by email
-- Verify password hash
-- Create session, return tokens
-
-#### `grant_type: refresh_token`
-Body: `{ refresh_token }`
-- Look up session by refresh token
-- Validate expiry and max refresh count
-- Rotate refresh token
-- Return new token pair
-
-#### `grant_type: pkce` (authorization code exchange)
-Body: `{ auth_code, code_verifier, redirect_to }`
-- Exchange OAuth authorization code for tokens
-- Validate PKCE code verifier against stored challenge
-- Return tokens
-
-**Sub-tasks:**
-- Implement all three grant types
-- Handle errors: wrong password, user not found, token expired
-- Return proper GoTree error codes
-
-**Output:** Unified token endpoint handler.
-**Difficulty:** Medium
-**Effort:** 3-4 days
-
-### 2.7 PKCE Support (`pkce.ts`)
-Implement PKCE (Proof Key for Code Exchange) flow:
-
-- `code_challenge` = base64url(sha256(code_verifier))
-- Store code challenge + auth code during OAuth authorize step
-- Verify code_verifier during token exchange
-- Support both `plain` and `S256` code challenge methods
-
-**Difficulty:** Medium
-**Effort:** 2-3 days
-
-### 2.8 User Endpoints (`user.ts`)
-`GET /auth/v1/user` — Get current authenticated user:
-- Decode JWT from `Authorization: Bearer` header
-- Look up user from D1
-- Return `{ id, email, ...app_metadata, ...user_metadata, ... }`
-
-`PUT /auth/v1/user` — Update current user:
-- Accept `{ email, password, data, ... }`
-- Handle email change (two-step flow with confirmation)
-- Handle password change (requires current password via `X-GoTrue-User-Password` header or reauthentication)
-- Update `user_metadata`
-- Return updated user
-
-**Difficulty:** Medium
-**Effort:** 2-3 days
-
-### 2.9 Password Recovery (`recover.ts`)
-`POST /auth/v1/recover` with body: `{ email, redirect_to? }`
-
-**Sub-tasks:**
-- Look up user by email
-- Generate recovery token
-- Store recovery token + timestamp
-- Send recovery email with token link
-- Return 200 (even if email not found — security best practice)
-
-**Difficulty:** Easy
-**Effort:** 1 day
-
-### 2.10 Email/Phone Verification (`verify.ts`)
-`POST /auth/v1/verify` with body: `{ token, type: 'signup'|'recovery'|'email_change', redirect_to? }`
-
-**Sub-tasks:**
-- Validate token type
-- For `signup`: confirm email, set `email_confirmed_at`
-- For `recovery`: validate recovery token, log in user, return session
-- For `email_change`: confirm new email address
-- Return `{ user, session }` on success
-
-**Difficulty:** Medium
-**Effort:** 2-3 days
-
-### 2.11 Logout (`logout`)
-`POST /auth/v1/logout` (with `scope: global|local|others`)
-
-- Invalidate current session
-- `global`: all sessions for this user
-- `local`: current session only (default)
-- `others`: all sessions except current
-
-**Difficulty:** Easy
-**Effort:** 1 day
-
-### 2.12 OAuth Integration
-Reuse Teenybase's existing OAuth infrastructure (Google, GitHub, Discord, LinkedIn presets) but adapt the flow:
-
-`POST /auth/v1/oauth/authorize` — Start OAuth flow:
-- Build authorize URL with state + PKCE challenge
-- Store PKCE code verifier in cookie/KV
-- Redirect user to provider
-
-`GET /auth/v1/oauth/callback` — Handle OAuth callback:
-- Exchange authorization code for access token
-- Fetch user info from provider
-- Look up or create user + identity record
-- Create session, set auth cookie
-- Redirect to `redirect_to` URL with `#access_token=...&refresh_token=...` (implicit flow) or code (PKCE flow)
-
-**Sub-tasks:**
-- Adapt Teenybase's existing OAuth handlers (`TableAuthExtension`) to work with the standalone auth table
-- Support implicit flow (hash fragment) and PKCE flow
-- Link OAuth identities to existing email users
-- Handle provider-specific quirks (GitHub email list, Google One Tap)
-
-**Difficulty:** Medium-Hard
-**Effort:** 1 week
-
-**Gotchas:**
-- Teenybase's OAuth is tied to a specific table extension. Need to decouple it.
-- Supabase supports 20+ OAuth providers. Start with Google, GitHub, Discord (TeenYbase already supports these).
-- Provider-specific user info mappings differ (email field location, avatar field, etc.)
-
-### 2.13 Invite (`invite.ts`)
-`POST /auth/v1/invite` — Admin-only endpoint:
-
-- Create user with `invited_at` set
-- Generate invite token
-- Send invite email
-- User claims invite via `/verify?type=signup`
-
-**Difficulty:** Easy
-**Effort:** 1 day
-
-### 2.14 Admin API (service_role)
-Endpoints that require a service role key (bypass RLS):
-
-- `GET /auth/v1/admin/users` — List all users (pagination)
-- `POST /auth/v1/admin/users` — Create user
-- `GET /auth/v1/admin/users/{id}` — Get user by ID
-- `PUT /auth/v1/admin/users/{id}` — Update user
-- `DELETE /auth/v1/admin/users/{id}` — Delete user
-
-**Sub-tasks:**
-- Implement service role key validation (separate from user JWT)
-- Map CRUD operations to D1 queries
-- Support pagination (`page`, `per_page`)
-
-**Difficulty:** Easy-Medium
-**Effort:** 2-3 days
-
-### 2.15 Settings Endpoint
-`GET /auth/v1/settings` — Return auth server configuration:
-
-```json
-{
-  "external": {
-    "google": true,
-    "github": true,
-    "discord": true
-  },
-  "disable_signup": false,
-  "mailer_autoconfirm": false,
-  "phone_autoconfirm": false,
-  "sms_provider": "twilio"
-}
-```
-
-**Difficulty:** Easy
-**Effort:** 1 day
-
-### 2.16 Auth Cookie Support
-When `authCookie` is configured:
-- Set `Set-Cookie` header with JWT on login/signup/OAuth callback
-- Read cookie as fallback when `Authorization` header absent
-- Delete cookie on logout
-
-**Difficulty:** Easy
-**Effort:** 1 day
-
-## Response Format
-
-All auth responses follow GoTree format:
-
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "expires_in": 3600,
-  "refresh_token": "abc123...",
-  "user": {
-    "id": "uuid",
-    "aud": "authenticated",
-    "role": "authenticated",
-    "email": "user@example.com",
-    "email_confirmed_at": "2025-01-01T00:00:00.000Z",
-    "phone": "",
-    "confirmation_sent_at": null,
-    "app_metadata": { "provider": "email", "providers": ["email"] },
-    "user_metadata": { "name": "John" },
-    "identities": [...],
-    "created_at": "2025-01-01T00:00:00.000Z",
-    "updated_at": "2025-01-01T00:00:00.000Z"
-  }
-}
-```
-
-## Error Format
-
-```json
-{
-  "code": 400,
-  "msg": "Invalid login credentials"
-}
-```
-
-Or specific error codes:
-- `400` — Invalid input, validation errors
-- `401` — Invalid credentials, expired token
-- `403` — Forbidden (e.g., signup disabled)
-- `404` — User not found
-- `422` — Unprocessable (e.g., email already registered)
-- `429` — Rate limited (if implemented)
-
-## Roles & JWT Injection: How Auth Feeds Into RLS
-
-This section details how the Auth layer produces the context that the Data layer's RLS policies consume.
-
-### Role Lifecycle
-
-Supabase has a three-role system encoded in the JWT `role` claim:
-
-| Role | Source | RLS effect |
+## URLs to Process (Catalog)
+
+### Auth Client Methods (`supabase.auth.*`) — 30 pages
+
+| # | Method | URL suffix | Tab Count | Priority |
+|---|--------|-----------|-----------|----------|
+| 1 | Overview | `/auth-api` | 2 tabs | **P0** |
+| 2 | `signUp(credentials)` | `/auth-signup` | 5 tabs | **P0** |
+| 3 | `onAuthStateChange(callback)` | `/auth-onauthstatechange` | 7 tabs | **P0** |
+| 4 | `signInAnonymously(credentials?)` | `/auth-signinanonymously` | 2 tabs | P1 |
+| 5 | `signInWithPassword(credentials)` | `/auth-signinwithpassword` | 2 tabs | **P0** |
+| 6 | `signInWithIdToken(credentials)` | `/auth-signinwithidtoken` | 1 tab | P2 |
+| 7 | `signInWithOtp(credentials)` | `/auth-signinwithotp` | 3 tabs | **P0** |
+| 8 | `signInWithOAuth(credentials)` | `/auth-signinwithoauth` | 3 tabs | P1 |
+| 9 | `signInWithSSO(params)` | `/auth-signinwithsso` | 2 tabs | P2 |
+| 10 | `signInWithWeb3(credentials)` | `/auth-signinwithweb3` | 4 tabs | P2 |
+| 11 | `signInWithPasskey(credentials?)` | `/auth-signinwithpasskey` | — | **SKIP v1** (passkey) |
+| 12 | `registerPasskey(credentials?)` | `/auth-registerpasskey` | — | **SKIP v1** (passkey) |
+| 13 | `getClaims(jwt?, options)` | `/auth-getclaims` | 1 tab | **P0** |
+| 14 | `signOut(options)` | `/auth-signout` | 3 tabs | **P0** |
+| 15 | `resetPasswordForEmail(email, options)` | `/auth-resetpasswordforemail` | 2 tabs | P1 |
+| 16 | `verifyOtp(params)` | `/auth-verifyotp` | 3 tabs | **P0** |
+| 17 | `getSession()` | `/auth-getsession` | 1 tab | **P0** |
+| 18 | `refreshSession(currentSession?)` | `/auth-refreshsession` | 2 tabs | P1 |
+| 19 | `getUser(jwt?)` | `/auth-getuser` | 2 tabs | **P0** |
+| 20 | `updateUser(attributes, options)` | `/auth-updateuser` | 5 tabs | P1 |
+| 21 | `getUserIdentities()` | `/auth-getuseridentities` | 1 tab | P2 |
+| 22 | `linkIdentity(credentials)` | `/auth-linkidentity` | 1 tab | P2 |
+| 23 | `unlinkIdentity(identity)` | `/auth-unlinkidentity` | 1 tab | P2 |
+| 24 | `reauthenticate()` | `/auth-reauthentication` | 1 tab | P2 |
+| 25 | `resend(credentials)` | `/auth-resend` | 4 tabs | P2 |
+| 26 | `setSession(currentSession)` | `/auth-setsession` | 1 tab | P1 |
+| 27 | `exchangeCodeForSession(authCode)` | `/auth-exchangecodeforsession` | 1 tab | P1 |
+| 28 | `startAutoRefresh()` | `/auth-startautorefresh` | 1 tab | P2 |
+| 29 | `stopAutoRefresh()` | `/auth-stopautorefresh` | 1 tab | P2 |
+| 30 | `initialize()` | `/auth-initialize` | — | P2 |
+
+### Skipped Sections (v1)
+- **Auth MFA** (`supabase.auth.mfa.*`) — enroll, challenge, verify, unenroll, getAAL, listFactors
+- **Auth Passkey** (`supabase.auth.passkey.*`) — list, update, delete, registration, authentication
+- **OAuth Server** — getAuthorizationDetails, approve/deny, listGrants, revokeGrant
+
+### Auth Admin Methods (`supabase.auth.admin.*`) — 8 pages
+
+| # | Method | URL suffix | Tab Count | Priority |
+|---|--------|-----------|-----------|----------|
+| 31 | `getUserById(uid)` | (same page) | 1 tab | **P0** |
+| 32 | `listUsers(params?)` | (same page) | 2 tabs | P1 |
+| 33 | `createUser(attributes)` | (same page) | 3 tabs | **P0** |
+| 34 | `deleteUser(id, shouldSoftDelete)` | (same page) | 1 tab | P1 |
+| 35 | `inviteUserByEmail(email, options)` | (same page) | 1 tab | P2 |
+| 36 | `generateLink(params)` | (same page) | 5 tabs | P1 |
+| 37 | `updateUserById(uid, attributes)` | (same page) | 8 tabs | P1 |
+| 38 | `signOut(jwt, scope)` | (same page) | — | P2 |
+| 39 | `deleteFactor(params)` (admin MFA) | (same page) | 1 tab | **SKIP v1** |
+| 40 | `listFactors(params)` (admin MFA) | (same page) | 1 tab | **SKIP v1** |
+
+### Passkey Admin Methods (`supabase.auth.admin.passkey.*`) — 2 pages
+| # | Method | Tab Count | Priority |
+|---|--------|-----------|----------|
+| 41 | `listPasskeys(params)` | — | **SKIP v1** |
+| 42 | `deletePasskey(params)` | — | **SKIP v1** |
+
+### OAuth Admin Methods (`supabase.auth.admin.oauth.*`) — 6 pages
+| # | Method | Tab Count | Priority |
+|---|--------|-----------|----------|
+| 43 | `listClients(params?)` | — | **SKIP v1** |
+| 44 | `getClient(clientId)` | — | **SKIP v1** |
+| 45 | `createClient(params)` | — | **SKIP v1** |
+| 46 | `updateClient(clientId, params)` | — | **SKIP v1** |
+| 47 | `deleteClient(clientId)` | — | **SKIP v1** |
+| 48 | `regenerateClientSecret(clientId)` | — | **SKIP v1** |
+
+**All OAuth Server and OAuth Admin methods are out of scope for v1** — they require OAuth 2.1 server enablement, which is a Supabase Platform feature not applicable to self-hosted/Teeneybase.
+
+## Auth Routes to Implement
+
+| GoTrue Route | Teenybase Mapping | Notes |
 |---|---|---|
-| `anon` | No token, or token with `role: "anon"` | Policies matching `anon` role apply. Default restrictive. |
-| `authenticated` | User JWT with `role: "authenticated"` | Policies matching `authenticated` role apply. |
-| `service_role` | Service role key (separate secret) | Bypasses ALL RLS. Full access. |
+| `POST /auth/v1/signup` | GoTrue signup | Email+password, phone+password |
+| `POST /auth/v1/token?grant_type=password` | GoTrue token | Password signin |
+| `POST /auth/v1/token?grant_type=refresh_token` | GoToken refresh | Session refresh |
+| `POST /auth/v1/otp` | OTP signin | Email/phone magic link/OTP |
+| `POST /auth/v1/verify` | OTP verify | Verify OTP/token hash |
+| `POST /auth/v1/logout` | Sign out | global/local/others scope |
+| `GET /auth/v1/user` | Get current user | JWT auth required |
+| `PUT /auth/v1/user` | Update user | JWT auth required |
+| `POST /auth/v1/reauthenticate` | Reauth nonce | Password reauth |
+| `POST /auth/v1/resend` | Resend OTP | Signup/email_change/phone_change |
+| `POST /auth/v1/invite` | Admin invite | service_role only |
+| `POST /auth/v1/admin/users` | Admin create | service_role only |
+| `GET /auth/v1/admin/users` | Admin list | service_role, paginated |
+| `GET /auth/v1/admin/users/{uid}` | Admin get by ID | service_role |
+| `PUT /auth/v1/admin/users/{uid}` | Admin update | service_role |
+| `DELETE /auth/v1/admin/users/{uid}` | Admin delete | service_role |
+| `POST /auth/v1/admin/generate_link` | Admin generate link | service_role |
+| `GET /auth/v1/user/identities` | Get identities | JWT auth required |
+| `POST /auth/v1/logout` (admin) | Admin sign out | service_role + JWT |
+| `GET /auth/v1/settings` | Project settings | Auth config |
 
-**JWT production:**
-- Login/signup → JWT with `role: "authenticated"`, `sub: <user-uuid>`, `email: <email>`
-- No auth → anon role (either no JWT or anon JWT with `role: "anon"`)
-- Service role key → passed via `apikey` header matching `SUPABASE_SERVICE_ROLE_KEY` env var
+## JWT / Token Handling
 
-**Middleware flow per request:**
+### Token Structure
 ```
-Request arrives
-  → Check apikey header == service_role_key? → role = 'service_role', admin = true
-  → Check Authorization: Bearer <token>
-    → Valid user JWT → decode claims → role = 'authenticated', uid = sub
-    → Valid anon JWT → role = 'anon', uid = null
-    → No token → role = 'anon', uid = null
-  → Build AuthContext → inject into request context
-  → RLS engine reads AuthContext → compiles WHERE clauses
-```
-
-### AuthContext → Policy Expression Injection
-
-The `AuthContext` object bridges Auth and Data:
-
-```typescript
-interface AuthContext {
-  uid: string | null;       // JWT.sub — the user's UUID
-  role: string;             // JWT.role — 'anon' | 'authenticated' | 'service_role'
-  email: string | null;     // JWT.email
-  jwt: Record<string, any>; // full decoded JWT payload
-  admin: boolean;           // true if service_role
-}
-```
-
-This context is:
-1. **Built** by the Auth middleware on each request (decode JWT, validate, extract claims)
-2. **Injected** into jsep globals so policy expressions can reference `auth.uid()`, `auth.role()`, etc.
-3. **Consumed** by the RLS compilation engine to resolve function calls to concrete values
-
-**Mapping to Supabase SQL functions:**
-
-```sql
--- Supabase policy expression:
-USING (auth.uid() = author_id)
-
--- At query time, our engine resolves:
--- auth.uid() → current AuthContext.uid → parameterized as ? with value 'user-uuid'
--- Final SQL: WHERE (? = author_id)  [bound with user's UUID]
-```
-
-This is essentially **parameter injection**: the policy expression is a template that gets the auth context values plugged in before execution.
-
-### JWT Claim Structure (Supabase-Compatible)
-
-Every user JWT must contain these claims for RLS to work:
-
-```json
+Access Token (JWT):
 {
   "aud": "authenticated",
-  "role": "authenticated",
+  "exp": <timestamp>,
   "sub": "<user-uuid>",
   "email": "user@example.com",
   "phone": "",
-  "app_metadata": {
-    "provider": "email",
-    "providers": ["email"]
-  },
-  "user_metadata": {
-    "name": "John Doe"
-  },
-  "iat": 1700000000,
-  "exp": 1700003600
+  "app_metadata": { "provider": "email", "providers": ["email"] },
+  "user_metadata": { ... },
+  "role": "authenticated"
 }
+
+Refresh Token: opaque string, stored in D1
 ```
 
-Critical claims for RLS:
-- `role` → determines which policies apply
-- `sub` → used by `auth.uid()`
-- `email` → used by `auth.email()`
-- Full payload → used by `auth.jwt()`
+### Key Types
+| Token | Lifetime | Storage |
+|---|---|---|
+| Access token (JWT) | Configurable (default 1h) | Client memory |
+| Refresh token | Until revoked/used once | D1 + client storage |
+| Session | Tied to refresh token | Client storage |
 
-**Anon JWT** (optional, for consistency with Supabase):
-```json
-{
-  "aud": "anon",
-  "role": "anon",
-  "sub": null,
-  "iat": 1700000000,
-  "exp": 1700003600
-}
+### JWT Signing
+- **Symmetric (HMAC)** — default, simpler, server-only verification
+- **Asymmetric (JWKS)** — optional, enables client-side `getClaims()` without network call
+- Teenybase v1: **HMAC only** (simpler, D1-compatible)
+- Store signing secret in D1 or Worker env var
+
+## Test Directory Structure (Auth additions)
+
+```
+tests/supabase-compat/
+├── unit/
+│   ├── jwt.test.ts                    ← JWT encode/decode, claims extraction
+│   ├── passwordHasher.test.ts         ← bcrypt/argon2 hashing
+│   ├── emailValidator.test.ts         ← Email format validation
+│   ├── sessionManager.test.ts         ← Session creation/refresh logic
+│   ├── authContext.test.ts            ← Header → SupabaseAuthContext
+│   └── authErrorMapper.test.ts        ← Auth errors → Supabase codes
+│
+├── integration/
+│   ├── fixtures/
+│   │   └── auth/
+│   │       ├── responses/
+│   │       │   ├── signup/
+│   │       │   ├── signin/
+│   │       │   ├── otp/
+│   │       │   └── user/
+│   │       └── seeds/
+│   │           └── auth-users.sql     ← Pre-seeded users in auth.users
+│   ├── auth/
+│   │   ├── signup.test.ts             ← Email+password, confirm behavior
+│   │   ├── signin.test.ts             ← Password, OTP verification
+│   │   ├── session.test.ts            ← getSession, refreshSession, setSession
+│   │   ├── user.test.ts               ← getUser, updateUser, getUserIdentities
+│   │   ├── signout.test.ts            ← global/local/others scope
+│   │   ├── events.test.ts             ← onAuthStateChange events
+│   │   ├── password-reset.test.ts     ← resetPasswordForEmail flow
+│   │   ├── otp.test.ts                ← verifyOtp types (email, sms, phone_change)
+│   │   └── admin/
+│   │       ├── admin-users.test.ts    ← CRUD via admin API
+│   │       └── admin-links.test.ts    ← generateLink variants
+│   └── rls/
+│       └── auth-functions.test.ts     ← auth.uid(), auth.role(), auth.email()
+│
+├── e2e/
+│   ├── auth.test.ts                   ← Full auth flows via supabase.auth.*
+│   └── admin-auth.test.ts             ← Admin operations via service_role
+│
+└── helpers/
+    ├── authClient.ts                  ← createClient with auth config
+    └── authSeed.ts                    ← Seed auth users in D1
 ```
 
-### Service Role Key
+## Test Pattern Examples
 
-A separate secret (not a JWT) that grants bypass:
-- Set as `SUPABASE_SERVICE_ROLE_KEY` environment variable
-- Passed via `apikey` header: `apikey: <service-role-key>`
-- When matched, sets `AuthContext = { role: 'service_role', admin: true }`
-- RLS engine detects `service_role` and skips all policy compilation
+### Unit Test
+```typescript
+// Unit: JWT encoding/decoding
+import { encodeJWT, decodeJWT } from '../../src/worker/supabase/auth/jwt';
 
-**Security note**: The service role key must NEVER be exposed to the frontend. It's for server-side use only (admin APIs, migrations, background jobs).
+describe('encodeJWT', () => {
+  it('produces valid JWT with correct claims', () => {
+    const payload = {
+      sub: 'user-uuid-123',
+      email: 'test@example.com',
+      role: 'authenticated',
+    };
+    const token = encodeJWT(payload, SECRET);
+    const decoded = decodeJWT(token, SECRET);
+    expect(decoded.sub).toBe('user-uuid-123');
+    expect(decoded.email).toBe('test@example.com');
+  });
 
-## Testing
+  it('rejects expired tokens', () => {
+    const payload = { sub: 'user-uuid', exp: Date.now() / 1000 - 10 };
+    const token = encodeJWT(payload, SECRET);
+    expect(() => decodeJWT(token, SECRET)).toThrow('Token expired');
+  });
+});
+```
 
-- Unit tests for JWT builder, PKCE, password hashing, role extraction
-- Integration tests using `@supabase/supabase-js`:
-  ```js
-  const { data, error } = await supabase.auth.signUp({ email, password })
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  const { data, error } = await supabase.auth.getUser()
-  const { error } = await supabase.auth.signOut()
-  const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' })
-  ```
-- RLS integration tests:
-  ```js
-  // Verify anon user cannot see private data
-  const { data: publicOnly } = await supabase.from('posts').select()
-  // Verify authenticated user sees own data
-  const { data: ownPosts } = await supabase.from('posts').select().eq('author_id', user.id)
-  // Verify service_role bypasses RLS
-  const adminClient = createClient(url, serviceRoleKey)
-  const { data: allPosts } = await adminClient.from('posts').select()
-  ```
+### Integration Test
+```typescript
+// Integration: signUp via supabase.auth
+import { describe, it, beforeAll } from 'vitest';
+import { createSupaTeenyClient } from '../../helpers/supabaseClient';
 
-## Phase 2 Dependencies
+describe('signUp(email, password)', () => {
+  it('returns user with unconfirmed email when email confirm enabled', async () => {
+    const { data, error } = await supabase.auth.signUp({
+      email: 'newuser@example.com',
+      password: 'secure-password-123',
+    });
 
-- Phase 1 (optional — auth can be built in parallel)
-- Teenybase core: JWT helper, password processors, email system, OAuth presets
-- D1: user/sessions/identities tables
+    expect(error).toBeNull();
+    expect(data.user).toBeDefined();
+    expect(data.user.email).toBe('newuser@example.com');
+    expect(data.user.email_confirmed_at).toBeNull();
+    // When email confirm enabled: session is null
+    expect(data.session).toBeNull();
+  });
 
-## Phase 2 Deliverables
+  it('returns user + session when email confirm disabled', async () => {
+    // Config: email confirm = false
+    const { data, error } = await supabase.auth.signUp({
+      email: 'instant@example.com',
+      password: 'secure-password-123',
+    });
 
-1. All major `/auth/v1/*` endpoints working
-2. GoTree-compatible JWT format
-3. Session management with refresh tokens
-4. PKCE OAuth flow working
-5. Email confirmation + password reset flows
-6. Admin API for user management
-7. Integration test suite passing
+    expect(error).toBeNull();
+    expect(data.user).toBeDefined();
+    expect(data.session).toBeDefined();
+    expect(data.session.access_token).toBeDefined();
+    expect(data.session.refresh_token).toBeDefined();
+  });
+});
+```
+
+### E2E Test
+```typescript
+// E2E: full sign in → session → user flow
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient('http://127.0.0.1:8787', ANON_KEY);
+
+describe('E2E: Auth lifecycle', () => {
+  it('signs up, signs in, gets user, signs out', async () => {
+    // 1. Sign up
+    const { data: signup } = await supabase.auth.signUp({
+      email: 'e2e@test.com',
+      password: 'test-password',
+    });
+    expect(signup.user).toBeDefined();
+
+    // 2. Sign in
+    const { data: signin } = await supabase.auth.signInWithPassword({
+      email: 'e2e@test.com',
+      password: 'test-password',
+    });
+    expect(signin.session.access_token).toBeDefined();
+
+    // 3. Get user
+    const { data: user } = await supabase.auth.getUser();
+    expect(user.user.email).toBe('e2e@test.com');
+
+    // 4. Sign out
+    const { error } = await supabase.auth.signOut();
+    expect(error).toBeNull();
+
+    // 5. Verify signed out
+    const { data: after } = await supabase.auth.getSession();
+    expect(after.session).toBeNull();
+  });
+});
+```
+
+## Auth Events (onAuthStateChange)
+
+| Event | When Emitted | Test Coverage |
+|---|---|---|
+| `INITIAL_SESSION` | Client constructed, session loaded from storage | Integration |
+| `SIGNED_IN` | User session confirmed/re-established | Integration |
+| `SIGNED_OUT` | User signs out / session expires | Integration |
+| `TOKEN_REFRESHED` | New access/refresh tokens fetched | Integration |
+| `USER_UPDATED` | updateUser() completes | Integration |
+| `PASSWORD_RECOVERY` | Password recovery link clicked | Integration |
+
+## D1 Schema for Auth
+
+```sql
+-- Teenybase already has an auth system. We map GoTrue concepts to it.
+
+-- Users table (Teenybase native, extended with Supabase fields)
+-- auth.users columns:
+--   id UUID PRIMARY KEY
+--   email TEXT UNIQUE
+--   phone TEXT UNIQUE
+--   encrypted_password TEXT (bcrypt hash)
+--   email_confirmed_at TIMESTAMPTZ
+--   phone_confirmed_at TIMESTAMPTZ
+--   email_change TEXT (new email pending)
+--   email_change_token_current TEXT
+--   email_change_token_new TEXT
+--   email_change_confirm_sent_at TIMESTAMPTZ
+--   recovery_token TEXT
+--   recovery_sent_at TIMESTAMPTZ
+--   confirmation_token TEXT
+--   confirmation_sent_at TIMESTAMPTZ
+--   raw_app_meta_data JSON
+--   raw_user_meta_data JSON
+--   is_super_admin BOOLEAN
+--   role TEXT (default: 'authenticated')
+--   created_at TIMESTAMPTZ
+--   updated_at TIMESTAMPTZ
+--   last_sign_in_at TIMESTAMPTZ
+--   banned_until TIMESTAMPTZ
+--   deleted_at TIMESTAMPTZ (soft delete)
+
+-- Sessions / refresh tokens
+CREATE TABLE auth_sessions (
+  id TEXT PRIMARY KEY,          -- refresh token value
+  user_id TEXT NOT NULL,        -- FK to auth.users
+  created_at TEXT NOT NULL,     -- ISO 8601
+  updated_at TEXT NOT NULL,     -- ISO 8601
+  expires_at TEXT,              -- ISO 8601 (optional expiry)
+  revoked BOOLEAN DEFAULT 0     -- 0 = active, 1 = revoked
+);
+
+-- One-time passwords
+CREATE TABLE auth_otps (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,                 -- NULL for sign-up OTPs
+  email TEXT,
+  phone TEXT,
+  token_hash TEXT,              -- SHA256 hash of OTP
+  token_type TEXT,              -- signup, magiclink, recovery, invite, email_change, phone_change, sms
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed BOOLEAN DEFAULT 0
+);
+
+-- Identities (OAuth, etc.)
+CREATE TABLE auth_identities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL,       -- google, github, apple, etc.
+  provider_id TEXT NOT NULL,    -- provider's user ID
+  identity_data JSON,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(provider, provider_id)
+);
+
+-- Indexes
+CREATE INDEX idx_sessions_user ON auth_sessions(user_id);
+CREATE INDEX idx_otps_token_hash ON auth_otps(token_hash);
+CREATE INDEX idx_otps_email ON auth_otps(email);
+CREATE INDEX idx_identities_user ON auth_identities(user_id);
+CREATE INDEX idx_identities_provider ON auth_identities(provider, provider_id);
+```
+
+## Auth Error Codes (Supabase GoTrue)
+
+| Code | Message | When |
+|---|---|---|
+| `weak_password` | Password should be at least 6 characters | Password too short |
+| `user_already_exists` | User already registered | Duplicate email/phone |
+| `user_not_found` | Invalid login credentials | Email not found |
+| `wrong_password` | Invalid login credentials | Wrong password |
+| `invalid_credentials` | Invalid login credentials | Generic auth failure |
+| `email_not_confirmed` | Email not confirmed | Accessing confirmed-only resource |
+| `phone_not_confirmed` | Phone not confirmed | Phone auth unconfirmed |
+| `otp_expired` | Token has expired or is invalid | OTP past expiry |
+| `otp_disabled` | Phone provider not configured | SMS not set up |
+| `session_not_found` | Session not found | Invalid refresh token |
+| `invalid_token` | Invalid token | Malformed/expired JWT |
+| `forbidden` | Forbidden | Insufficient permissions |
+| `over_email_send_rate_limit` | Email rate limit exceeded | Too many emails |
+| `over_sms_send_rate_limit` | SMS rate limit exceeded | Too many SMS |
+
+## SQLite Compatibility Matrix (Auth)
+
+| GoTrue Feature | SQLite Support | Action |
+|---|---|---|
+| Email/password signup | ✅ | Direct |
+| Email confirmation | ✅ | Token storage + expiry check |
+| Password sign in | ✅ | bcrypt compare |
+| OTP (email/phone) | ✅ | Token storage + expiry |
+| Magic links | ✅ | Token-based redirect |
+| Session management | ✅ | Refresh tokens in D1 |
+| JWT (HMAC) | ✅ | @tsndoo/hono-jwt or jose |
+| JWT (asymmetric/JWKS) | ⚠️ | **v2** (nice-to-have) |
+| OAuth sign in (redirect) | ❌ | **v2** (external provider orchestration) |
+| SSO/SAML | ❌ | **Out of scope** |
+| MFA (TOTP) | ❌ | **Out of scope** |
+| Passkey/WebAuthn | ❌ | **Out of scope** |
+| Web3 (Solana/Ethereum) | ❌ | **Out of scope** |
+| Password recovery | ✅ | Token-based email flow |
+| Email change (secure) | ✅ | Dual-token flow |
+| Phone change | ⚠️ | Requires SMS provider |
+| Admin user CRUD | ✅ | Direct D1 operations |
+| Invite by email | ✅ | Token generation |
+| generateLink | ✅ | Link token creation |
+| Sign out scopes | ✅ | Token revocation logic |
+| Anonymous sign in | ✅ | Random UUID user |
+| ID token sign in | ⚠️ | OIDC provider verification — **v2** |
+
+## Implementation-Test Phase Mapping
+
+| Impl Phase | Tests |
+|------------|-------|
+| **2.1** Auth routing + JWT | Unit: `jwt.test.ts`, `authContext.test.ts` |
+| **2.2** Signup + email confirm | Integration: `auth/signup.test.ts` |
+| **2.3** Sign in (password) | Integration: `auth/signin.test.ts` |
+| **2.4** Session management | Integration: `auth/session.test.ts` |
+| **2.5** User operations | Integration: `auth/user.test.ts` |
+| **2.6** OTP + magic links | Integration: `auth/otp.test.ts` |
+| **2.7** Password reset | Integration: `auth/password-reset.test.ts` |
+| **2.8** Sign out scopes | Integration: `auth/signout.test.ts` |
+| **2.9** Auth events | Integration: `auth/events.test.ts` |
+| **2.10** Admin user CRUD | Integration: `auth/admin/admin-users.test.ts` |
+| **2.11** Admin links/generate | Integration: `auth/admin/admin-links.test.ts` |
+| **2.12** RLS auth functions | Integration: `rls/auth-functions.test.ts` |
+| **2.13** E2E auth lifecycle | E2E: `auth.test.ts`, `admin-auth.test.ts` |
+
+## Auth Fixture Extraction
+
+Extract from Supabase docs via Chrome DevTools:
+
+1. **Navigate** to each auth URL
+2. **Discover** all h2 headings (each auth method)
+3. **For each tab**: click it, wait for render
+4. **Extract** example code (always visible or in tab)
+5. **Extract** parameter info from headings/descriptions
+6. **Save** as structured JSON:
+   ```json
+   {
+     "page": "auth-signup",
+     "section": "Create a new user",
+     "tab": "Sign up with an email and password",
+     "code": "supabase.auth.signUp({ email: 'example@email.com', password: 'example-password' })",
+     "params": { "email": "string", "password": "string" },
+     "returns": { "data": { "user": "User | null", "session": "Session | null" }, "error": "AuthError | null" }
+   }
+   ```
+
+## Out of Scope (v1)
+
+- **MFA/2FA** — TOTP enrollment, challenge/verify, AAL levels
+- **Passkey/WebAuthn** — registration, authentication, management
+- **OAuth sign in** — redirect flow, PKCE, provider tokens
+- **SSO/SAML** — enterprise identity providers
+- **Web3** — Solana/Ethereum wallet sign in
+- **OAuth Server/Admin** — OAuth 2.1 consent screens, client management
+- **Admin MFA** — deleteFactor, listFactors
+- **Admin Passkey** — listPasskeys, deletePasskey
+- **ID token sign in** — OIDC provider verification
+- **Phone auth** — requires SMS provider (Twilio, etc.)
+- **Real-time auth events** — WebSocket streaming
+
+## Notes
+
+- **JWT signing**: Use HMAC-SHA256 with a secret stored in Worker env. Simpler than asymmetric for v1.
+- **Password hashing**: Use bcrypt (available in Cloudflare Workers via WebAssembly or use Worker-native crypto).
+- **Email sending**: Teenybase doesn't send emails. v1 returns success with token; actual email sending is deferred to user's email service integration.
+- **Phone OTP**: Requires external SMS provider. v1 stores OTP in D1 but cannot send SMS.
+- **OAuth**: Full OAuth flow requires external provider configuration. v1 stores identity data but doesn't implement redirect flow.
+- **`autoRefreshToken`**: Client-side feature. Server just needs to respond correctly to refresh token requests.
+- **`persistSession`**: Client-side storage. Server is stateless regarding session persistence.
+- **Admin API**: Requires `service_role` key. In Teenybase, this maps to Teenybase's admin role or a configured admin API key.
+- **`onAuthStateChange`**: Client-side event system. Server generates correct responses; events are emitted by supabase-js client based on server responses.
