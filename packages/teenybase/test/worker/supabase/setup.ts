@@ -30,8 +30,10 @@ async function seedD1(db: D1Database) {
   await db.exec(`CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY, name TEXT, days TEXT)`);
 
   await db.exec(`CREATE TABLE IF NOT EXISTS texts (id INTEGER PRIMARY KEY, content TEXT)`);
-  await db.exec(`INSERT OR REPLACE INTO texts (id, content) VALUES (1, 'The quick brown fox')`);
   await db.exec(`INSERT OR REPLACE INTO texts (id, content) VALUES (2, 'jumps over the lazy dog')`);
+
+  // RLS policies table
+  await db.exec(`CREATE TABLE IF NOT EXISTS rls_policies (id TEXT PRIMARY KEY, table_name TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL, operation TEXT NOT NULL, using_expr TEXT, with_check_expr TEXT, permissive INTEGER DEFAULT 1)`);
 }
 
 app.all('/rest/v1/:table', async (c) => {

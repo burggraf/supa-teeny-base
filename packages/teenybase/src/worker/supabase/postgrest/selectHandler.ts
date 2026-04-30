@@ -1,4 +1,4 @@
-import { FilterExpr, PostgrestRequest, PostgrestResponse } from '../shared/types';
+import { FilterExpr, PostgrestRequest, PostgrestResponse, SupabaseAuthContext } from '../shared/types';
 import { ERROR_CODES, throwSupabaseError } from '../shared/errorMapper';
 import {
   SelectQuerySelect,
@@ -8,16 +8,11 @@ import { SelectParams, TableSelectParams } from '../../../types/sql';
 import { JsepContext, createJsepContext, honoToJsep, parseColumnList } from '../../../sql/parse/jsep';
 import { $Table } from '../$Table';
 import { TableData } from '../../types/table';
+import { compileRlsExpression } from '../rls/policyCompiler';
+import { RlsPolicy } from '../rls/policyStore';
 
 /**
  * Build a WHERE clause jsep expression from PostgREST filters.
- *
- * Uses Teenybase's jsep syntax:
- * - == for equality (handles NULL correctly)
- * - != for inequality
- * - ~ for LIKE
- * - & for AND
- * - | for OR
  */
 export function buildFilterExpression(filters: FilterExpr[]): string | null {
   if (!filters.length) return null;
@@ -63,7 +58,6 @@ function filterToJsepExpr(f: FilterExpr): string {
     case 'cs':
     case 'cd':
     case 'ov': {
-      // Array containment via LIKE pattern matching on JSON text
       const pattern = `%${f.value}%`;
       return `(${quoteCol(col)} ~ ${jsonVal(pattern)})`;
     }
@@ -81,9 +75,7 @@ function filterToJsepExpr(f: FilterExpr): string {
   }
 }
 
-/** Build an OR expression from filter groups.
- * PostgREST: or=(name.eq.Luke,name.eq.Leia) → (name == 'Luke') | (name == 'Leia')
- */
+/** Build an OR expression from filter groups. */
 export function buildOrExpression(filterGroups: FilterExpr[][]): string | null {
   if (!filterGroups.length) return null;
 
@@ -113,7 +105,6 @@ function jsonVal(v: unknown): string {
 
 /**
  * Parse PostgREST select columns into Teenybase select format.
- * Uses Teenybase's parseColumnList which handles FK join subqueries.
  */
 export function buildSelectClause(
   select: string | undefined,
@@ -150,7 +141,6 @@ export function buildSelectClause(
 
 /**
  * Parse PostgREST order into Teenybase order format.
- * PostgREST: "created_at.desc,nullsfirst" → Teenybase: "-created_at"
  */
 export function buildOrderBy(order: string | undefined): string | undefined {
   if (!order) return undefined;
@@ -167,7 +157,6 @@ export function buildOrderBy(order: string | undefined): string | undefined {
       switch (tok.toLowerCase()) {
         case 'desc': descending = true; break;
         case 'asc': descending = false; break;
-        // nullsfirst/nullslast handled by Teenybase
       }
     }
 
@@ -177,9 +166,7 @@ export function buildOrderBy(order: string | undefined): string | undefined {
   return parts.join(', ');
 }
 
-/**
- * Convert result array to CSV format.
- */
+/** Convert result array to CSV format. */
 export function toCsv(data: unknown[]): string {
   if (!data.length) return '';
 
@@ -203,16 +190,32 @@ export function toCsv(data: unknown[]): string {
 }
 
 /**
- * Execute a PostgREST SELECT request against Teenybase.
+ * Execute a PostgREST SELECT request against Teenybase with RLS injection.
  */
 export async function executeSelect(
   req: PostgrestRequest,
   table: $Table,
   tables: TableData[],
+  authCtx: SupabaseAuthContext,
+  policies: RlsPolicy[] = [],
 ): Promise<PostgrestResponse> {
-  const whereExpr = buildFilterExpression(req.filters);
+  // Build user filter
+  const userWhere = buildFilterExpression(req.filters);
 
-  // Parse select columns (includes FK join subqueries)
+  // Build RLS filter
+  const rlsWhere = compileRlsExpression(policies, 'SELECT', authCtx, table.name);
+
+  // Combine: user filter AND RLS filter
+  let whereExpr: string | null = null;
+  if (userWhere && rlsWhere) {
+    whereExpr = `(${userWhere}) & (${rlsWhere})`;
+  } else if (userWhere) {
+    whereExpr = userWhere;
+  } else if (rlsWhere) {
+    whereExpr = rlsWhere;
+  }
+
+  // Parse select columns
   const { selects, subQueries } = buildSelectClause(req.select, table, tables);
 
   const selectParams: TableSelectParams = {
@@ -222,10 +225,6 @@ export async function executeSelect(
     offset: req.offset,
     order: buildOrderBy(req.order),
   };
-
-  // Handle or() filter — PostgREST or=(and(a,b),c) syntax
-  // For now, we handle simple OR filters via the filter parser
-  // Complex OR/AND combinations are handled in buildFilterExpression
 
   let data: unknown;
   let count: number | null = null;
@@ -242,7 +241,6 @@ export async function executeSelect(
   if (data && Array.isArray(data) && subQueries.length > 0) {
     for (const row of data as Record<string, unknown>[]) {
       for (const sq of subQueries) {
-        // Execute subquery for each row
         const fkTable = tables.find((t) => t.name === (sq.from as string));
         if (!fkTable) continue;
         const fkTableObj = table.$db.table(fkTable.name);
@@ -256,7 +254,6 @@ export async function executeSelect(
             where: fkWhere ? { q: fkWhere } : undefined,
             limit: fkLimit === 1 ? 1 : undefined,
           });
-          // Embed under the subquery alias
           const alias = (sq as any).as || sq.from;
           row[alias] = fkLimit === 1 ? (fkResult?.[0] ?? null) : (fkResult ?? []);
         } catch {
@@ -267,31 +264,18 @@ export async function executeSelect(
     }
   }
 
-  // Handle single/maybeSingle based on query params
+  // Handle single/maybeSingle
   const singleParam = table.$db.c.req.query('single');
   const maybeSingleParam = table.$db.c.req.query('maybeSingle');
   if (singleParam !== undefined || maybeSingleParam !== undefined) {
     const dataArr = data as unknown[] | null;
     if (!dataArr || dataArr.length === 0) {
       if (singleParam !== undefined) {
-        throwSupabaseError(
-          ERROR_CODES.NO_ROWS_FOR_SINGLE,
-          'JSON object requested, multiple (or no) rows returned',
-          null,
-          null,
-          406,
-        );
+        throwSupabaseError(ERROR_CODES.NO_ROWS_FOR_SINGLE, 'JSON object requested, multiple (or no) rows returned', null, null, 406);
       }
-      // maybeSingle: return null for 0 rows
       data = null;
     } else if (dataArr.length > 1) {
-      throwSupabaseError(
-        'PGRST116',
-        'More than one row returned',
-        null,
-        null,
-        400,
-      );
+      throwSupabaseError('PGRST116', 'More than one row returned', null, null, 400);
     } else {
       data = dataArr[0];
     }

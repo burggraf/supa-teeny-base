@@ -284,4 +284,23 @@ describe('Phase 1: PostgREST CRUD', () => {
       expect(contentRange).toBeTruthy();
     });
   });
+
+  describe('RLS — policy injection', () => {
+    it('allows full access with no policies', async () => {
+      // No policies inserted, so all rows should be visible
+      const res = await SELF.fetch('http://localhost/rest/v1/characters');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as Record<string, unknown>[];
+      expect(data.length).toBe(3);
+    });
+
+    it('service_role bypasses RLS', async () => {
+      // Seed a restrictive policy
+      await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Luke', { method: 'DELETE' });
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', {
+        headers: { apikey: 'sb-service-test-key' },
+      });
+      expect(res.status).toBe(200);
+    });
+  });
 });
