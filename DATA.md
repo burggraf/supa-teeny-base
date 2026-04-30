@@ -1,370 +1,209 @@
-# DATA.md: Test Suite Plan for Supabase.js Data API Compatibility
+# DATA.md: Supabase.js Data API — Implementation Status
 
-## Goal
+## Current State
 
-Verify PostgREST compatibility layer produces responses matching real Supabase. Every feature tested at 3 levels:
-- **Unit** — pure functions (parsers, formatters, mappers), no D1
-- **Integration** — real D1 via `@cloudflare/vitest-pool-workers`, supabase-js client against test Hono app
-- **E2E** — `wrangler dev` live server + `@supabase/supabase-js` client in Node
+**Tests:** 127 passing, 1 skipped (128 total)
+**Location:** `packages/teenybase/test/worker/supabase/`
+**Approach:** Unit + Integration via `@cloudflare/vitest-pool-workers` + `SELF.fetch()`
+**E2E:** Not yet built
 
-Each test uses:
-- **SQL setup** — DDL/DML from Supabase docs examples
-- **supabase-js call** — exact code from Supabase docs
-- **expected response** — exact JSON response from Supabase docs
+---
 
-## Approach: Extract Tests from Supabase Docs
+## Implementation Status by Sub-Phase
 
-Supabase docs pages have **interactive tabbed examples** with:
-1. **Example code** — `supabase.from('table').select()...`
-2. **Data source** — SQL `CREATE TABLE` + `INSERT` statements
-3. **Response** — expected `{ data, status, statusText }` JSON
+### Phase 0: Foundation ✅
 
-Use **Chrome DevTools** (via `chrome-devtools` MCP) to programmatically extract all three. Better than manual copy-paste: hundreds of examples across ~40 pages, tabs change with docs updates.
-
-### Extraction Script
-
-```js
-// For each page:
-// 1. Navigate to URL
-// 2. Find all h2 headings (each = a method/filter/modifier)
-// 3. For each heading, find all [role="tab"] elements
-// 4. Click each tab, then click "Data source" and "Response" buttons
-// 5. Extract content from [data-state="open"] panels
-// 6. Save as structured test fixtures
-```
-
-## URLs to Process (Catalog)
-
-### CRUD Operations (all on same URL)
-| # | Page | Tab Count | Priority |
-|---|------|-----------|----------|
-| 1 | `https://supabase.com/docs/reference/javascript/select` | 12 tabs + 44 sections | **P0** |
-| 2 | `insert` | Same page, 3 tabs | **P0** |
-| 3 | `update` | Same page, 3 tabs | **P0** |
-| 4 | `upsert` | Same page, 5 tabs | **P0** |
-| 5 | `delete` | Same page, 3 tabs | **P0** |
-| 6 | `rpc` | Same page, 6 tabs | P1 |
-
-### Filters (23 pages)
-| # | URL suffix | Tabs | Notes |
-|---|-----------|------|-------|
-| 7 | `/javascript/using-filters` | 5 | Overview |
-| 8 | `/javascript/eq` | 1 | `eq(column, value)` |
-| 9 | `/javascript/neq` | 1 | `neq(column, value)` |
-| 10 | `/javascript/gt` | 1+Notes | `gt(column, value)` |
-| 11 | `/javascript/gte` | 1 | `gte(column, value)` |
-| 12 | `/javascript/lt` | 1 | `lt(column, value)` |
-| 13 | `/javascript/lte` | 1 | `lte(column, value)` |
-| 14 | `/javascript/like` | 1 | `like(column, pattern)` |
-| 15 | `/javascript/ilike` | 1 | `ilike(column, pattern)` |
-| 16 | `/javascript/is` | 1+Notes | NULL/bool |
-| 17 | `/javascript/in` | 1 | array inclusion |
-| 18 | `/javascript/contains` | 3 | array, range, jsonb |
-| 19 | `/javascript/containedby` | 3 | array, range, jsonb |
-| 20–24 | `/javascript/range{gt,gte,lt,lte,adjacent}` | 1 each | **SKIP v1** |
-| 25 | `/javascript/overlaps` | 2 | array, range |
-| 26 | `/javascript/textsearch` | 4 | FTS variants |
-| 27 | `/javascript/match` | 1 | multi-eq shorthand |
-| 28 | `/javascript/not` | 1 | negation |
-| 29 | `/javascript/or` | 3 | or, or+and, referenced |
-| 30 | `/javascript/filter` | 2 | raw PostgREST escape |
-
-### Modifiers (13 pages)
-| # | URL suffix | Tabs | Notes |
-|---|-----------|------|-------|
-| 31 | `/javascript/db-modifiers-select` | — | Return data after mutation |
-| 32 | `/javascript/order` | 3 | asc/desc/nullsfirst/nullslast |
-| 33 | `/javascript/limit` | 2 | limit, referenced table |
-| 34 | `/javascript/range` | 1 | range(from, to) |
-| 35 | `/javascript/db-abortsignal` | 2 | abort, timeout |
-| 36 | `/javascript/single` | 1 | error if ≠1 row |
-| 37 | `/javascript/maybesingle` | 1 | null if 0 rows |
-| 38 | `/javascript/db-csv` | 1+Notes | csv() output |
-| 39 | `/javascript/db-strip-nulls` | 1 | PostgREST 11.2+ |
-| 40 | `/javascript/db-returns` | 2 | deprecated |
-| 41 | `/javascript/db-overrideTypes` | 6 | client-only |
-| 42 | `/javascript/explain` | 2+Notes | EXPLAIN plan |
-
-## Test Database Schema
-
-### Core Tables (Postgres syntax → SQLite translations)
-```sql
--- characters (most filter examples)
-CREATE TABLE characters (id INTEGER PRIMARY KEY, name TEXT);
-INSERT INTO characters VALUES (1, 'Luke'), (2, 'Leia'), (3, 'Han');
-
--- countries (insert/delete/is, join with cities)
-CREATE TABLE countries (id INTEGER PRIMARY KEY, name TEXT);
-
--- cities (FK join examples)
-CREATE TABLE cities (id INTEGER PRIMARY KEY, name TEXT, country_id INTEGER REFERENCES countries(id));
-
--- instruments (update examples)
-CREATE TABLE instruments (id INTEGER PRIMARY KEY, name TEXT);
-INSERT INTO instruments VALUES (1, 'harpsichord');
-
--- users (upsert examples)
-CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, message TEXT);
-
--- issues (array columns → stored as JSON)
-CREATE TABLE issues (id INTEGER PRIMARY KEY, title TEXT, tags TEXT);
--- tags stored as JSON: '["bug","urgent"]'
-
--- classes (array columns → stored as JSON)
-CREATE TABLE classes (id INTEGER PRIMARY KEY, name TEXT, days TEXT);
-
--- reservations (range → **SKIP v1**, table exists but range ops not implemented)
-CREATE TABLE reservations (id INTEGER PRIMARY KEY, during TEXT);
-
--- texts (FTS5)
-CREATE TABLE texts (id INTEGER PRIMARY KEY, content TEXT);
-CREATE VIRTUAL TABLE texts_fts USING fts5(content, content_rowid=id);
-```
-
-## Test Directory Structure
-
-```
-tests/supabase-compat/
-├── unit/                              ← Pure functions, no D1, no worker
-│   ├── queryParser.test.ts            ← URL params → internal AST
-│   ├── operators.test.ts              ← eq/neq/gt/... → jsep expressions
-│   ├── selectParser.test.ts           ← select=col,rel(col) parsing
-│   ├── preferHeader.test.ts           ← Prefer header parsing
-│   ├── responseFormatter.test.ts      ← JSON/CSV output, Content-Range
-│   ├── errorMapper.test.ts            ← Teenybase errors → Supabase codes
-│   ├── policyParser.test.ts           ← CREATE POLICY → internal format
-│   └── authContext.test.ts            ← Header → SupabaseAuthContext
-│
-├── integration/                       ← D1-backed via vitest-pool-workers
-│   ├── setup.ts                       ← Test Hono app with supabase compat
-│   ├── fixtures/
-│   │   ├── schemas/                   ← SQL seed scripts (from extraction)
-│   │   │   ├── characters.sql
-│   │   │   ├── countries.sql
-│   │   │   ├── cities.sql
-│   │   │   ├── instruments.sql
-│   │   │   ├── users.sql
-│   │   │   ├── issues.sql
-│   │   │   ├── classes.sql
-│   │   │   └── texts.sql
-│   │   └── responses/                 ← Expected JSON (from extraction)
-│   │       ├── select/
-│   │       ├── insert/
-│   │       ├── update/
-│   │       ├── upsert/
-│   │       ├── delete/
-│   │       ├── filters/
-│   │       └── modifiers/
-│   ├── crud/
-│   │   ├── select.test.ts             ← All select scenarios from docs
-│   │   ├── insert.test.ts             ← Single, bulk, columns param
-│   │   ├── update.test.ts             ← Filtered update
-│   │   ├── upsert.test.ts             ← Merge, ignore, on_conflict
-│   │   └── delete.test.ts             ← Filtered delete
-│   ├── filters/
-│   │   ├── comparisons.test.ts        ← eq/neq/gt/gte/lt/lte
-│   │   ├── pattern.test.ts            ← like/ilike
-│   │   ├── null-bool.test.ts          ← is (NULL, true, false)
-│   │   ├── array-json.test.ts         ← contains/containedBy/overlaps (JSON)
-│   │   ├── logical.test.ts            ← not, or, and
-│   │   ├── match.test.ts              ← match multi-eq
-│   │   └── textsearch.test.ts         ← FTS5 basic search
-│   ├── modifiers/
-│   │   ├── order.test.ts              ← asc/desc/nullsfirst/nullslast
-│   │   ├── pagination.test.ts         ← limit, offset, range
-│   │   ├── single.test.ts             ← single(), maybeSingle()
-│   │   └── csv.test.ts                ← Accept: text/csv
-│   ├── rls/
-│   │   ├── policies.test.ts           ← CRUD + injection
-│   │   └── auth-functions.test.ts     ← auth.uid(), auth.role(), etc.
-│   ├── prefer-headers.test.ts         ← return, count, resolution
-│   └── error-codes.test.ts            ← Verify error shape + codes
-│
-├── e2e/                               ← wrangler dev + real supabase-js
-│   ├── setup.ts                       ← Spawn dev server, create client
-│   ├── crud.test.ts                   ← Full CRUD via supabase.from()
-│   ├── filters.test.ts                ← All filters via supabase client
-│   ├── auth.test.ts                   ← Phase 2: signUp, signIn, user
-│   └── storage.test.ts                ← Phase 3: upload, download, list
-│
-└── helpers/
-    ├── supabaseClient.ts              ← createClient('http://localhost:8787', key)
-    ├── seed.ts                        ← Run SQL fixtures against D1
-    └── compare.ts                     ← Deep-compare actual vs expected
-```
-
-## Test Pattern
-
-### Unit Test
-```typescript
-// Unit: pure function, no D1
-import { parseQueryParams } from './queryParser';
-
-describe('parseQueryParams', () => {
-  it('parses filter params into filter expressions', () => {
-    const params = new URLSearchParams('name.eq=Luke&age.gt=18');
-    const result = parseQueryParams(params);
-    expect(result.filters).toEqual([
-      { column: 'name', operator: 'eq', value: 'Luke' },
-      { column: 'age', operator: 'gt', value: '18' },
-    ]);
-  });
-});
-```
-
-### Integration Test
-```typescript
-// Integration: real D1 via vitest-pool-workers
-import { describe, it, beforeAll } from 'vitest';
-import { createSupaflareClient } from '../helpers/supabaseClient';
-import { seed } from '../helpers/seed';
-
-describe('eq(column, value)', () => {
-  beforeAll(async () => { await seed('characters'); });
-
-  it('matches rows where column equals value', async () => {
-    const { data, error } = await supabase
-      .from('characters')
-      .select()
-      .eq('name', 'Leia');
-
-    expect(error).toBeNull();
-    expect(data).toEqual([{ id: 2, name: 'Leia' }]);
-  });
-});
-```
-
-### E2E Test
-```typescript
-// E2E: wrangler dev + real @supabase/supabase-js
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient('http://127.0.0.1:8787', ANON_KEY);
-
-describe('E2E: CRUD via supabase-js', () => {
-  it('inserts and selects a row', async () => {
-    const { data: inserted } = await supabase
-      .from('countries')
-      .insert({ name: 'Naboo' })
-      .select()
-      .single();
-
-    expect(inserted.name).toBe('Naboo');
-
-    const { data: found } = await supabase
-      .from('countries')
-      .select()
-      .eq('name', 'Naboo')
-      .single();
-
-    expect(found.id).toBe(inserted.id);
-  });
-});
-```
-
-## Implementation-Test Phase Mapping
-
-Each implementation sub-phase ships with its tests. TDD flow:
-1. Write unit test → fail → implement → pass
-2. Write integration test → fail → implement handler → pass
-3. Write e2e test → fail → wire together → pass
-
-| Impl Phase | Tests |
-|------------|-------|
-| **0.1** Routing integration | Integration — route dispatch, 404 fallback |
-| **0.2** Shared types | Unit — type validation (zod schemas if used) |
-| **0.3** Test infra | Helpers: `createSupaflareClient()`, `seed()`, `compare()` |
-| **0.4** Error mapping | Unit: `errorMapper.test.ts`. Integration: `error-codes.test.ts` |
-| **1A** Routing + parsing | Unit: `queryParser`, `operators`, `preferHeader`, `authContext` |
-| **1B** SELECT | Integration: `crud/select.test.ts`, `modifiers/*.test.ts` |
-| **1C** Filters | Integration: `filters/*.test.ts` |
-| **1D** Mutations | Integration: `crud/{insert,update,upsert,delete}.test.ts` |
-| **1E** Response formatting | Unit: `responseFormatter`. Integration: `prefer-headers`, `csv` |
-| **1F** RLS | Integration: `rls/policies.test.ts`, `rls/auth-functions.test.ts` |
-| **1G** Modifiers | Integration: `modifiers/*.test.ts` |
-
-## Test Fixture Extraction
-
-Extract from Supabase docs via Chrome DevTools:
-
-1. **Navigate** to each URL
-2. **Discover** all h2 headings and their tabs
-3. **For each tab**: click it, wait for render
-4. **Click** "Data source" button → extract SQL
-5. **Click** "Response" button → extract JSON
-6. **Capture** example code (always visible)
-7. **Save** as structured JSON:
-   ```json
-   {
-     "page": "select",
-     "section": "Column is equal to a value",
-     "tab": "With select()",
-     "code": "supabase.from('characters').select().eq('name', 'Leia')",
-     "sql": "CREATE TABLE characters (...); INSERT INTO ...",
-     "response": { "data": [...], "status": 200 }
-   }
-   ```
-
-## SQLite Compatibility Matrix
-
-| PostgREST Feature | SQLite Support | Action |
+| Item | Status | Notes |
 |---|---|---|
-| `eq`, `neq`, `gt`, `gte`, `lt`, `lte` | ✅ Native | Direct |
-| `like` | ✅ Native | Direct |
-| `ilike` | ⚠️ Via `LIKE COLLATE NOCASE` | Translate |
-| `is` (NULL) | ✅ Native | Direct |
-| `in` | ✅ Native | Direct |
-| `contains` (array) | ⚠️ JSON emulation | Emulate via `json_each` |
-| `contains` (jsonb) | ⚠️ Via `json_extract` | Emulate |
-| `containedBy` (array) | ⚠️ JSON emulation | Emulate or skip |
-| `containedBy` (jsonb) | ⚠️ Via `json_extract` | Emulate |
-| `range*` operators | ❌ No range types | **Skip v1**, test error response |
-| `overlaps` (array) | ⚠️ Via JSON | Emulate or skip |
-| `overlaps` (range) | ❌ No range types | **Skip v1** |
-| `textSearch` | ⚠️ SQLite FTS5 | Partial (basic terms) |
-| `match` / `imatch` (regex) | ❌ No POSIX regex | **Skip v1**, test error response |
-| `csv()` | ✅ | Direct |
-| `stripNulls()` | ⚠️ PostgREST 11.2+ | Skip (client handles) |
-| `explain` | ✅ `EXPLAIN QUERY PLAN` | Direct |
-| `single()` / `maybeSingle()` | ✅ Row count check | Direct |
-| `count=exact` | ✅ `COUNT(*)` | Direct |
-| `count=planned/estimated` | ❌ No planner stats | Fall back to exact |
+| Extension routing (`$DBExtension`) | ✅ | Registers `/rest/v1/:table` routes |
+| Shared types | ✅ | `SupabaseRole`, `PostgrestRequest`, `SupabaseError`, `FilterExpr` |
+| Error code mapping | ✅ | 8 codes: PGRST200/100/301/305, 23505, PGRST204/116/000 |
+| Config resolution | ✅ | Reads `SUPAFLARE_*` env vars, provides defaults |
 
-## Notes
+**Tradeoff:** Tests live in `packages/teenybase/test/worker/supabase/` (inside teenybase package) instead of separate `tests/supabase-compat/` directory. This gives direct access to Teenybase internals but means tests are tightly coupled to the teenybase monorepo.
 
-- **RPC**: Teenybase `/action/{name}` maps conceptually but interface differs. **v2 or skip.**
-- **Range operators**: SQLite no native range types. **v2 or skip.**
-- **Array operators**: Store as JSON text. `contains`/`containedBy`/`overlaps` need JSON emulation.
-- **Full-text search**: Postgres `tsvector` vs SQLite FTS5. Different syntax/stemmers. Basic only.
-- **`stripNulls()`**: PostgREST 11.2+. Skip if not needed.
-- **`explain()`**: SQLite `EXPLAIN QUERY PLAN` — usable but different format.
-- **`overrideTypes`**, **`returns<T>`**: Client-side only. No server changes needed.
-- **`abortSignal`**: Client-side timeout. Server: standard Hono request lifecycle.
-- **Auth/Storage/Realtime/Edge Functions**: Not in DATA.md. Covered by AUTH.md, STORAGE.md, out of scope.
-## Test Catalog
+### Phase 1A: Request Parsing ✅
 
-All DATA tests are tracked in `scripts/test-catalog/test-catalog.db` (auto-extracted from Supabase docs).
+| Item | Status | Tests | Notes |
+|---|---|---|---|
+| URL query param parsing | ✅ | 27 | `select`, `limit`, `offset`, `order`, `on_conflict`, `resolution` |
+| Filter param parsing | ✅ | 27 | `column.op=value` → `{column, operator, value}` |
+| Type coercion | ✅ | 8 | `null`→null, `true`/`false`→bool, digits→number |
+| Prefer header parsing | ✅ | 15 | `return=`, `count=`, `resolution=`, `handling=` |
+| Auth context extraction | ✅ | 11 | apikey header → role, Bearer JWT → payload decode |
 
-**Check DATA test status:**
-```bash
-cd scripts/test-catalog
-node catalog.js status --category DATA                      # all DATA tests
-node catalog.js status --category DATA --subcategory select # select tests only
-node catalog.js status --category DATA --subcategory filters
-```
+**Tradeoff:** JWT decoding uses raw base64 without signature validation. Full validation deferred to Phase 2 (auth module).
 
-**Record test results:**
-```bash
-# After validating against local Supabase
-node catalog.js run --id 3 --target supabase --status pass
-# After implementing in Supaflare
-node catalog.js run --id 3 --target supaflare --status pass
-```
+### Phase 1B: SELECT ✅
 
-**DATA report:**
-```bash
-node catalog.js report --category DATA
-node catalog.js report --category DATA --format markdown
-```
+| Item | Status | Tests | Notes |
+|---|---|---|---|
+| Basic SELECT (`select=*`) | ✅ | — | Returns all columns |
+| Column selection (`select=id,name`) | ✅ | 1 | Returns specific columns |
+| Nested FK joins (`select=id,countries(name)`) | ✅ | 0 | Code exists, no integration test. Requires FK-configured test tables. |
+| Limit + Offset | ✅ | 2 | `limit=10`, `offset=20` |
+| Order (asc/desc) | ✅ | 2 | `-column` for desc via Teenybase `parseColumnList` |
+| Order (nullsfirst/nullslast) | ⚠️ | 0 | Parsed but not passed through to Teenybase |
+| single() | ✅ | 1 | `single=true` query param → object response, 406 if 0 rows |
+| maybeSingle() | ✅ | 1 | `maybeSingle=true` → null for 0 rows, 400 if >1 |
 
-**DATA test counts:** 103 in_scope, 92 skip_v1 (range ops, RPC, realtime, edge functions)
+**Tradeoff:** `single()` and `maybeSingle()` use query params (`?single=true`) rather than PostgREST header approach. Works but differs from real Supabase API.
+
+### Phase 1C: Filter Operators
+
+| Operator | Status | Notes |
+|---|---|---|
+| `eq` | ✅ | jsep `==` (handles NULL correctly) |
+| `neq` | ✅ | jsep `!=` |
+| `gt`, `gte`, `lt`, `lte` | ✅ | Direct SQLite comparison |
+| `like` | ✅ | jsep `~` (LIKE) |
+| `ilike` | ✅ | `LOWER(col) ~ LOWER(val)` |
+| `is` (null/true/false) | ✅ | `col == null` / `col == true` / `col == false` |
+| `in` | ✅ | OR chain: `(col == a) | (col == b)` |
+| `match` | ✅ | Expands to AND of eq expressions |
+| `not` | ⚠️ | Parser exists, no test coverage |
+| `or` | ⚠️ | `buildOrExpression()` exists but **not wired** into request parser. `or=()` syntax from URL not parsed. |
+| `contains` (cs) | ⚠️ | Partial — uses `%pattern%` LIKE matching on JSON text, not `json_each` |
+| `containedBy` (cd) | ⚠️ | Same as contains |
+| `overlaps` (ov) | ⚠️ | Same as contains |
+| `textSearch` | ❌ | Not implemented |
+| `range*` operators | ❌ | Skipped — no SQLite range types |
+| `imatch` (regex) | ❌ | Skipped — no POSIX regex in SQLite |
+
+### Phase 1D: Mutations ✅
+
+| Item | Status | Tests | Notes |
+|---|---|---|---|
+| INSERT (single row) | ✅ | 1 | Returns inserted row |
+| INSERT (bulk) | ✅ | 1 | Array body |
+| UPDATE (filtered) | ✅ | 2 | Requires at least one filter (safety) |
+| DELETE (filtered) | ✅ | 2 | Requires at least one filter (safety) |
+| UPSERT (`on_conflict`) | ✅ | 0 | Implemented, no test coverage |
+| UPSERT resolution (merge/ignore) | ✅ | 0 | `IGNORE`/`REPLACE` mapped |
+| `Prefer: return=minimal` (204) | ✅ | 1 | Returns empty body |
+| `Prefer: return=representation` | ✅ | — | Default — returns rows |
+
+### Phase 1E: Response Formatting ✅
+
+| Item | Status | Notes |
+|---|---|---|
+| JSON response | ✅ | `application/json; charset=utf-8` |
+| CSV output | ✅ | `Accept: text/csv` → RFC 4180 CSV with proper escaping |
+| HTTP status codes | ✅ | 200 (GET/PATCH/DELETE), 201 (POST), 204 (minimal) |
+| Content-Range header | ✅ | `Prefer: count=exact` → `0-N/total` |
+| Content-Range (planned/estimated) | ❌ | Falls back to exact count |
+
+### Phase 1F: RLS (Row-Level Security) ✅ Core, ⚠️ Partial
+
+| Item | Status | Notes |
+|---|---|---|
+| `rls_policies` D1 table | ✅ | Created at test seed time. Schema: `id, table_name, name, role, operation, using_expr, with_check_expr, permissive` |
+| Policy lookup | ✅ | `loadPolicies(db, tableName)` → filters by table |
+| PERMISSIVE combination (OR) | ✅ | Multiple permissive policies joined with `\|` |
+| RESTRICTIVE combination (AND) | ✅ | Multiple restrictive policies joined with `&` |
+| Mixed PERMISSIVE + RESTRICTIVE | ✅ | `(PERM) & (REST)` |
+| `service_role` bypass | ✅ | Returns null (no RLS filter) |
+| `auth.uid()` replacement | ✅ | Replaced with actual uid string |
+| `auth.role()` replacement | ✅ | Replaced with role string |
+| `auth.email()` replacement | ✅ | Replaced with email string |
+| `auth.jwt()` replacement | ✅ | Replaced with JSON object literal |
+| Column qualification | ✅ | `user_id` → `todos.user_id` |
+| RLS injection into SELECT | ✅ | User WHERE & RLS WHERE combined |
+| RLS injection into UPDATE | ✅ | Same pattern |
+| RLS injection into DELETE | ✅ | Same pattern |
+| RLS injection into INSERT | ⚠️ | Policies loaded but not enforced. WITH CHECK not applied to inserted rows. |
+| WITH CHECK for INSERT/UPDATE | ❌ | Deferred — no pre-insert validation |
+| `CREATE POLICY` SQL parsing | ❌ | Not implemented. Policies must be inserted directly into D1. |
+| RLS on nested FK joins | ❌ | Only top-level table policies are applied. Subqueries don't inherit RLS. |
+| Admin API for policy CRUD | ❌ | No REST endpoint. Use direct D1 access. |
+
+**Tradeoff:** Auth functions (`auth.uid()`, etc.) are string-replaced in policy expressions before jsep parsing. This works but doesn't integrate with Teenybase's jsep function registry. If a policy expression references `auth.uid()` as a column name (unlikely), it would be incorrectly replaced.
+
+**Tradeoff:** `qualifyColumns()` qualifies ALL bare identifiers. This means policy expressions like `user_id == auth.uid()` become `todos.user_id == 'user-123'` — correct for simple cases but breaks if the expression uses a subquery or function that references another table.
+
+### Phase 1G: Modifiers
+
+| Item | Status | Notes |
+|---|---|---|
+| Order (asc/desc) | ✅ | `-column` syntax |
+| Limit | ✅ | `limit=N` |
+| Offset | ✅ | `offset=N` |
+| Schema switching | ❌ | Not implemented |
+| `stripNulls()` | ❌ | Client-side per PostgREST 11.2+ |
+| `explain` | ❌ | Not implemented |
+
+---
+
+## Deferred / Skipped for v1
+
+| Feature | Reason |
+|---|---|
+| Range operators (`rangeGt`, etc.) | No SQLite range types |
+| `imatch` (regex) | No POSIX regex in SQLite |
+| `textSearch` (FTS5) | Requires FTS5 index setup, different syntax from Postgres tsvector |
+| RPC (`supabase.rpc()`) | Teenybase `/action/{name}` maps conceptually but interface differs |
+| `count=planned/estimated` | No SQLite query planner stats |
+| `overrideTypes` / `returns<T>` | Client-side only |
+| `abortSignal` / timeout | Client-side only |
+| Realtime / WebSockets | Out of scope (Phase 2+) |
+| E2E tests (`wrangler dev` + supabase-js) | Infrastructure needed |
+
+---
+
+## Known Gaps vs DATA.md Original Plan
+
+| Planned in DATA.md | Reality |
+|---|---|
+| `tests/supabase-compat/unit/`, `integration/`, `e2e/` dirs | All tests in `packages/teenybase/test/worker/supabase/` |
+| SQL fixtures in `fixtures/schemas/*.sql` used by seed | Fixtures created but unused — test harness seeds D1 programmatically |
+| Expected responses in `fixtures/responses/` | Not created — no extracted JSON fixtures |
+| `createSupaflareClient()` used in tests | Helper exists but unused — tests use `SELF.fetch()` directly |
+| `compare.ts` deep-compare utility | Exists but unused |
+| Per-feature test files (`crud/select.test.ts`, `filters/comparisons.test.ts`) | Monolithic `routing.test.ts` (36 tests in one file) |
+| RLS integration test (`rls/policies.test.ts`) | Unit test only (`rlsCompiler.test.ts`), no integration test |
+| `auth-functions.test.ts` | Not created |
+| 3-level testing (unit → integration → E2E) | Only unit + integration. No E2E layer. |
+
+---
+
+## Test Infrastructure
+
+### What We Have
+- **Vitest pool-workers** config with D1/R2 bindings
+- **In-process Hono app** via `SELF.fetch()` (no live server needed)
+- **Programmatic D1 seeding** via `db.exec()` in setup.ts
+- **Unit tests** for pure functions (parsers, mappers, compilers) — no D1, no worker pool
+
+### What We Lack
+- **E2E tests** — `wrangler dev` live server + real `@supabase/supabase-js` client
+- **Supabase reference tests** — running same tests against real Supabase for comparison
+- **Test catalog integration** — `catalog.js run` not called after test execution
+- **Fixture extraction** — Supabase docs → test fixtures pipeline exists but unused
+
+### HEAD Count Endpoint
+- Skipped in tests. `t.selectCount({})` fails in Teenybase (needs valid `where` clause). Workaround: pass `{ select: '*' }` but this may still fail.
+
+---
+
+## SQLite Compatibility Matrix (Final)
+
+| PostgREST Feature | SQLite Support | Implementation |
+|---|---|---|
+| `eq`, `neq`, `gt`, `gte`, `lt`, `lte` | ✅ Native | jsep expressions → SQLite |
+| `like` | ✅ Native | jsep `~` operator |
+| `ilike` | ⚠️ Via LOWER | `LOWER(col) ~ LOWER(val)` |
+| `is` (NULL/bool) | ✅ Native | `col == null` / `col == true` |
+| `in` | ✅ Native | OR chain of equality |
+| `contains` (array) | ⚠️ LIKE pattern | `%value%` on JSON text |
+| `containedBy` | ⚠️ LIKE pattern | Same |
+| `overlaps` | ⚠️ LIKE pattern | Same |
+| `range*` | ❌ No range types | Skip v1 |
+| `textSearch` | ⚠️ FTS5 | Not implemented |
+| `match` | ✅ Multi-eq AND | Expands to AND chain |
+| `imatch` | ❌ No POSIX regex | Skip v1 |
+| `csv()` | ✅ | Manual CSV builder |
+| `single()` | ✅ Row count | `single=true` query param |
+| `maybeSingle()` | ✅ Row count | `maybeSingle=true` query param |
+| `count=exact` | ✅ COUNT(*) | `table.select(params, true)` |
+| `count=planned` | ❌ No planner stats | Skip |
+| `count=estimated` | ❌ No planner stats | Skip |

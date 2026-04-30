@@ -16,10 +16,11 @@ Supaflare — Supabase-compatible API layer on Teenybase (D1 + R2 + Cloudflare W
 ## Key Directories
 
 ```
-packages/teenybase/src/worker/    # Core Teenybase (existing)
-packages/teenybase/src/worker/supabase/  # Supabase compat layer (NEW)
-packages/teenybase/test/worker/   # Existing Teenybase tests
-tests/supabase-compat/            # Supabase compat tests (NEW)
+packages/teenybase/src/worker/             # Core Teenybase (existing)
+packages/teenybase/src/worker/supabase/    # Supabase compat layer (NEW)
+packages/teenybase/test/worker/supabase/   # Supabase compat tests (all levels)
+tests/supabase-compat/                     # Helpers + fixtures (mostly orphaned)
+scripts/test-catalog/                      # Test catalog DB + extraction tools
 ```
 
 ## Architecture
@@ -55,10 +56,37 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 
 - **TDD always.** Unit → Integration → E2E, in that order.
 - **Unit:** pure functions, no D1. Fast feedback.
-- **Integration:** `@cloudflare/vitest-pool-workers`, real D1, supabase-js client.
-- **E2E:** `wrangler dev` live server + supabase-js in Node process.
-- **Test fixtures** extracted from Supabase docs (see DATA.md, AUTH.md, STORAGE.md extraction plans).
+- **Integration:** `@cloudflare/vitest-pool-workers`, real D1, SELF.fetch() against test Hono app.
+- **E2E:** `wrangler dev` live server + `@supabase/supabase-js` client in Node process. (Not yet built)
 - **Auth tests:** set `auth.email.autoConfirm: true` to skip email sending. Seed bcrypt passwords via helper.
+- **Test location:** All supabase-compat tests live in `packages/teenybase/test/worker/supabase/`. Tests use `SELF.fetch()` (not supabase-js client) for integration tests.
+
+## Plan File Accuracy (CRITICAL)
+
+**After completing any implementation phase, you MUST update the corresponding plan file.** This is non-negotiable. Plan files are the single source of truth for project status.
+
+**When to update:**
+1. After committing a completed phase — update STATUS, tradeoffs, and gaps
+2. When deferring a feature — document WHY and WHERE in PLAN.md
+3. When deviating from the original plan — document the deviation and rationale
+4. When discovering a Teenybase limitation — document it in the relevant plan file
+
+**What to update:**
+- `DATA.md` — Phase 1 (DATA) implementation status, test results, deferred items, known gaps
+- `AUTH.md` — Phase 2 (Auth) implementation status (when started)
+- `STORAGE.md` — Phase 3 (Storage) implementation status (when started)
+- `PLAN.md` — Cross-phase summary (when started)
+
+**What each plan file MUST track:**
+- ✅ What's implemented (with test counts)
+- ⚠️ What's partially implemented (and what's missing)
+- ❌ What's deferred/skipped (and WHY)
+- Tradeoffs made (and their implications)
+- Known gaps between plan and reality
+- Test infrastructure notes (what works, what doesn't)
+- SQLite compatibility notes for each feature
+
+**Before starting a new phase, review all plan files to understand current state.**
 
 ## Test Catalog
 
