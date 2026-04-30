@@ -1,0 +1,1202 @@
+{
+  "1": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "6 rows"
+  },
+  "2": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "keys: id,name"
+  },
+  "3": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "FK embedding works"
+  },
+  "4": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "FK embedding with spaced names works"
+  },
+  "5": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Junction table query works"
+  },
+  "6": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Dual FK query works"
+  },
+  "7": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 French cities"
+  },
+  "8": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Referenced count works"
+  },
+  "9": {
+    "status": "pass",
+    "duration": 1,
+    "notes": "count=6"
+  },
+  "10": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "3 rows with JSON extraction"
+  },
+  "11": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "5 rows"
+  },
+  "12": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "2 rows from private schema"
+  },
+  "13": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "Insert succeeded"
+  },
+  "14": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "Insert+select works"
+  },
+  "15": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "Bulk insert works"
+  },
+  "16": {
+    "status": "pass",
+    "duration": 6,
+    "notes": "Update works"
+  },
+  "17": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "Update+select works"
+  },
+  "18": {
+    "status": "pass",
+    "duration": 6,
+    "notes": "JSON update works"
+  },
+  "19": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "Upsert works"
+  },
+  "20": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "count=1"
+  },
+  "21": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "Upsert works"
+  },
+  "22": {
+    "status": "pass",
+    "duration": 6,
+    "notes": "Bulk upsert works"
+  },
+  "23": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "Upsert+onConflict works"
+  },
+  "24": {
+    "status": "pass",
+    "duration": 8,
+    "notes": "Delete works"
+  },
+  "25": {
+    "status": "pass",
+    "duration": 9,
+    "notes": "Delete+select works"
+  },
+  "26": {
+    "status": "pass",
+    "duration": 12,
+    "notes": "Bulk delete works"
+  },
+  "33": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "1 rows"
+  },
+  "34": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "3 rows"
+  },
+  "35": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "3 rows"
+  },
+  "36": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "0 rows"
+  },
+  "37": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 rows"
+  },
+  "38": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "1 rows"
+  },
+  "39": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "4 rows"
+  },
+  "40": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "2 rows"
+  },
+  "41": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "1 rows"
+  },
+  "42": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "3 rows"
+  },
+  "43": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "1 rows"
+  },
+  "44": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "2 rows"
+  },
+  "45": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "ilike works"
+  },
+  "46": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "0 null emails"
+  },
+  "47": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "2 rows"
+  },
+  "48": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "2 rows"
+  },
+  "49": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Range types not available"
+  },
+  "50": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "0 rows"
+  },
+  "51": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "4 rows"
+  },
+  "52": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Range types not available"
+  },
+  "53": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "3 rows (JSON containedBy needs PostgREST syntax)"
+  },
+  "59": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "2 rows"
+  },
+  "60": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Range types not available"
+  },
+  "61": {
+    "status": "pass",
+    "duration": 7,
+    "notes": "0 rows"
+  },
+  "62": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "1 rows"
+  },
+  "63": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "0 rows"
+  },
+  "64": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "0 rows"
+  },
+  "65": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "0 rows"
+  },
+  "66": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "4 rows"
+  },
+  "67": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "2 rows"
+  },
+  "68": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "3 rows"
+  },
+  "69": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "PostgREST or() does not support FK column references (table.column.op.value syntax)"
+  },
+  "70": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 rows"
+  },
+  "71": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 rows"
+  },
+  "72": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "3 rows"
+  },
+  "73": {
+    "status": "pass",
+    "duration": 6,
+    "notes": "Upsert+select works"
+  },
+  "74": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "5 rows"
+  },
+  "75": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "Limit on FK works"
+  },
+  "76": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Ordered by FK country name"
+  },
+  "77": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 rows"
+  },
+  "78": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "Limit on FK works"
+  },
+  "79": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "5 rows"
+  },
+  "80": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "abortSignal accepted"
+  },
+  "81": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Select works"
+  },
+  "82": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "5 rows"
+  },
+  "83": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 rows"
+  },
+  "84": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "CSV: 5 rows, header: id,name,age,species"
+  },
+  "85": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "5 rows"
+  },
+  "86": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "return=minimal: empty body on mutation"
+  },
+  "87": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Single object returned"
+  },
+  "88": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "2 rows"
+  },
+  "89": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "Full representation"
+  },
+  "90": {
+    "status": "pass",
+    "duration": 1,
+    "notes": "Full representation for single object"
+  },
+  "91": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "return=minimal with count"
+  },
+  "92": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "Single object returned"
+  },
+  "93": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "3 rows"
+  },
+  "94": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "EXPLAIN needs direct DB access"
+  },
+  "95": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "EXPLAIN ANALYZE needs direct DB access"
+  },
+  "96": {
+    "status": "pass",
+    "duration": 0,
+    "notes": "Auth client created (getSession works)"
+  },
+  "97": {
+    "status": "pass",
+    "duration": 11,
+    "notes": "Admin auth client works"
+  },
+  "98": {
+    "status": "pass",
+    "duration": 94,
+    "notes": "Created ea72c4bd"
+  },
+  "99": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Phone needs SMS provider"
+  },
+  "100": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "WhatsApp needs provider"
+  },
+  "101": {
+    "status": "pass",
+    "duration": 97,
+    "notes": "Created with metadata"
+  },
+  "102": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Redirect URL needs browser flow"
+  },
+  "103": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Events need browser/React context"
+  },
+  "104": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Events need browser/React context"
+  },
+  "105": {
+    "status": "skip",
+    "duration": 1,
+    "error": null,
+    "notes": "OAuth needs provider config"
+  },
+  "106": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "React context needs React"
+  },
+  "107": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Events need browser/React context"
+  },
+  "108": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Events need browser/React context"
+  },
+  "109": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Events need browser/React context"
+  },
+  "110": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Events need browser/React context"
+  },
+  "111": {
+    "status": "pass",
+    "duration": 12,
+    "notes": "Anonymous user: 4034fcfc..."
+  },
+  "112": {
+    "status": "pass",
+    "duration": 13,
+    "notes": "Anonymous with metadata: 4b49a71b..."
+  },
+  "113": {
+    "status": "pass",
+    "duration": 180,
+    "notes": "Password signin works"
+  },
+  "114": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Phone needs SMS provider"
+  },
+  "116": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "OTP email signin needs email provider"
+  },
+  "117": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "OTP SMS needs provider"
+  },
+  "118": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "WhatsApp needs provider"
+  },
+  "130": {
+    "status": "pass",
+    "duration": 191,
+    "notes": "sub=1d6d4d5d, exp=1777572231"
+  },
+  "131": {
+    "status": "pass",
+    "duration": 210,
+    "notes": "signOut global works"
+  },
+  "132": {
+    "status": "pass",
+    "duration": 205,
+    "notes": "signOut local works"
+  },
+  "133": {
+    "status": "pass",
+    "duration": 212,
+    "notes": "signOut others works"
+  },
+  "134": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Password reset needs email provider"
+  },
+  "135": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "React flow needs browser"
+  },
+  "136": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "OTP verify needs email flow"
+  },
+  "137": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "OTP SMS needs provider"
+  },
+  "138": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Token hash needs email flow"
+  },
+  "139": {
+    "status": "pass",
+    "duration": 0,
+    "notes": "getSession works"
+  },
+  "140": {
+    "status": "pass",
+    "duration": 226,
+    "notes": "refreshSession works"
+  },
+  "141": {
+    "status": "pass",
+    "duration": 216,
+    "notes": "refreshSession works"
+  },
+  "142": {
+    "status": "pass",
+    "duration": 229,
+    "notes": "getUser works"
+  },
+  "143": {
+    "status": "pass",
+    "duration": 219,
+    "notes": "getUser with token works"
+  },
+  "144": {
+    "status": "pass",
+    "duration": 239,
+    "notes": "updateUser email works"
+  },
+  "145": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Phone needs SMS"
+  },
+  "146": {
+    "status": "pass",
+    "duration": 360,
+    "notes": "updatePassword works"
+  },
+  "147": {
+    "status": "pass",
+    "duration": 219,
+    "notes": "updateUser metadata works"
+  },
+  "148": {
+    "status": "pass",
+    "duration": 373,
+    "notes": "Reauth+updatePassword works"
+  },
+  "152": {
+    "status": "pass",
+    "duration": 217,
+    "notes": "reauthenticate works"
+  },
+  "153": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Resend needs email provider"
+  },
+  "154": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Phone needs SMS"
+  },
+  "155": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Resend needs email provider"
+  },
+  "156": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Phone needs SMS"
+  },
+  "157": {
+    "status": "pass",
+    "duration": 207,
+    "notes": "setSession works"
+  },
+  "158": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "PKCE needs redirect flow"
+  },
+  "159": {
+    "status": "skip",
+    "duration": 1,
+    "error": null,
+    "notes": "React Native auto-refresh needs mobile"
+  },
+  "160": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "React Native auto-refresh needs mobile"
+  },
+  "161": {
+    "status": "pass",
+    "duration": 1,
+    "notes": "Client session init works"
+  },
+  "188": {
+    "status": "pass",
+    "duration": 13,
+    "notes": "Admin client works"
+  },
+  "189": {
+    "status": "pass",
+    "duration": 202,
+    "notes": "Admin getUserById works"
+  },
+  "190": {
+    "status": "pass",
+    "duration": 15,
+    "notes": "7 users on page"
+  },
+  "191": {
+    "status": "pass",
+    "duration": 11,
+    "notes": "Page 1: 5 users"
+  },
+  "192": {
+    "status": "pass",
+    "duration": 91,
+    "notes": "Admin create with metadata works"
+  },
+  "193": {
+    "status": "pass",
+    "duration": 86,
+    "notes": "Admin auto-confirm works"
+  },
+  "194": {
+    "status": "skip",
+    "duration": 1,
+    "error": null,
+    "notes": "Phone needs SMS"
+  },
+  "195": {
+    "status": "pass",
+    "duration": 114,
+    "notes": "Admin delete works"
+  },
+  "196": {
+    "status": "skip",
+    "duration": 1,
+    "error": null,
+    "notes": "Invite needs email provider"
+  },
+  "197": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Email link needs provider"
+  },
+  "198": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Email link needs provider"
+  },
+  "199": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Email link needs provider"
+  },
+  "200": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Email link needs provider"
+  },
+  "201": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Email link needs provider"
+  },
+  "202": {
+    "status": "pass",
+    "duration": 12,
+    "notes": "Admin list works"
+  },
+  "203": {
+    "status": "pass",
+    "duration": 110,
+    "notes": "Admin update email works"
+  },
+  "204": {
+    "status": "pass",
+    "duration": 167,
+    "notes": "Admin update password works"
+  },
+  "205": {
+    "status": "pass",
+    "duration": 105,
+    "notes": "Admin update metadata works"
+  },
+  "206": {
+    "status": "pass",
+    "duration": 106,
+    "notes": "Admin app_metadata works"
+  },
+  "207": {
+    "status": "pass",
+    "duration": 112,
+    "notes": "Admin email confirm works"
+  },
+  "208": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Phone needs SMS"
+  },
+  "209": {
+    "status": "pass",
+    "duration": 102,
+    "notes": "Admin ban works (100 years = 876000h)"
+  },
+  "210": {
+    "status": "pass",
+    "duration": 209,
+    "notes": "Admin-created user can sign out"
+  },
+  "250": {
+    "status": "pass",
+    "duration": 7,
+    "notes": "createBucket public works"
+  },
+  "251": {
+    "status": "pass",
+    "duration": 12,
+    "notes": "accessing: t-acc"
+  },
+  "252": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "6 buckets"
+  },
+  "253": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "6 buckets"
+  },
+  "254": {
+    "status": "pass",
+    "duration": 10,
+    "notes": "getBucket: t-get"
+  },
+  "255": {
+    "status": "pass",
+    "duration": 6,
+    "notes": "createBucket works"
+  },
+  "256": {
+    "status": "pass",
+    "duration": 14,
+    "notes": "emptyBucket works"
+  },
+  "257": {
+    "status": "pass",
+    "duration": 13,
+    "notes": "updateBucket works"
+  },
+  "258": {
+    "status": "pass",
+    "duration": 17,
+    "notes": "deleteBucket works"
+  },
+  "259": {
+    "status": "pass",
+    "duration": 20,
+    "notes": "upload: f.txt"
+  },
+  "260": {
+    "status": "pass",
+    "duration": 20,
+    "notes": "upload from ArrayBuffer works"
+  },
+  "261": {
+    "status": "pass",
+    "duration": 30,
+    "notes": "update works"
+  },
+  "262": {
+    "status": "pass",
+    "duration": 34,
+    "notes": "update from ArrayBuffer works"
+  },
+  "263": {
+    "status": "pass",
+    "duration": 29,
+    "notes": "move works"
+  },
+  "264": {
+    "status": "pass",
+    "duration": 41,
+    "notes": "copy works"
+  },
+  "265": {
+    "status": "pass",
+    "duration": 21,
+    "notes": "createSignedUrl works"
+  },
+  "266": {
+    "status": "pass",
+    "duration": 21,
+    "notes": "signed URL with transform works"
+  },
+  "267": {
+    "status": "pass",
+    "duration": 18,
+    "notes": "signed download URL works"
+  },
+  "268": {
+    "status": "pass",
+    "duration": 31,
+    "notes": "2 URLs"
+  },
+  "269": {
+    "status": "pass",
+    "duration": 11,
+    "notes": "createSignedUploadUrl works"
+  },
+  "270": {
+    "status": "pass",
+    "duration": 32,
+    "notes": "upload via signed URL works"
+  },
+  "271": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "http://127.0.0.1:54321/storage/v1/object/public/t-pub/test.txt"
+  },
+  "272": {
+    "status": "pass",
+    "duration": 6,
+    "notes": "public URL with transform works"
+  },
+  "273": {
+    "status": "pass",
+    "duration": 0,
+    "notes": "download URL works"
+  },
+  "274": {
+    "status": "pass",
+    "duration": 24,
+    "notes": "download: dl"
+  },
+  "275": {
+    "status": "pass",
+    "duration": 23,
+    "notes": "download works (transformations need image files)"
+  },
+  "276": {
+    "status": "pass",
+    "duration": 22,
+    "notes": "download with cache-control works"
+  },
+  "277": {
+    "status": "pass",
+    "duration": 23,
+    "notes": "signal option accepted"
+  },
+  "278": {
+    "status": "pass",
+    "duration": 33,
+    "notes": "delete works"
+  },
+  "279": {
+    "status": "pass",
+    "duration": 37,
+    "notes": "2 objects"
+  },
+  "280": {
+    "status": "pass",
+    "duration": 18,
+    "notes": "1 in subdir"
+  },
+  "281": {
+    "status": "pass",
+    "duration": 22,
+    "notes": "existence check works"
+  },
+  "282": {
+    "status": "pass",
+    "duration": 28,
+    "notes": "file info: max-age=3600"
+  },
+  "283": {
+    "status": "pass",
+    "duration": 65,
+    "notes": "2 objects (paginated)"
+  },
+  "284": {
+    "status": "pass",
+    "duration": 21,
+    "notes": "base64: YmFzZTY0..."
+  },
+  "613": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "Could not find the table 'public.nonexistent_xyz' in the schema cache"
+  },
+  "614": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "column characters.nonexistent_col_xyz does not exist"
+  },
+  "615": {
+    "status": "pass",
+    "duration": 1,
+    "notes": "Expected 3 parts in JWT; got 1"
+  },
+  "616": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "No RLS violation (anon has access)"
+  },
+  "617": {
+    "status": "pass",
+    "duration": 8,
+    "notes": "duplicate key value violates unique constraint \"countries_pkey\""
+  },
+  "618": {
+    "status": "pass",
+    "duration": 5,
+    "notes": "return=representation"
+  },
+  "619": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "return=minimal"
+  },
+  "620": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "count=6"
+  },
+  "621": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Planned count not supported"
+  },
+  "622": {
+    "status": "pass",
+    "duration": 3,
+    "notes": "Anon INSERT blocked: new row violates row-level security policy for table \"rls_todos\""
+  },
+  "623": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "Anon SELECT: empty (no policy)"
+  },
+  "624": {
+    "status": "pass",
+    "duration": 218,
+    "notes": "Authenticated INSERT works"
+  },
+  "625": {
+    "status": "pass",
+    "duration": 211,
+    "notes": "Owner UPDATE works"
+  },
+  "626": {
+    "status": "pass",
+    "duration": 186,
+    "notes": "Non-owner DELETE: empty (RLS blocks)"
+  },
+  "627": {
+    "status": "pass",
+    "duration": 203,
+    "notes": "auth.uid() = 0c576440..."
+  },
+  "628": {
+    "status": "pass",
+    "duration": 185,
+    "notes": "Authenticated role confirmed (user can access rls_todos)"
+  },
+  "629": {
+    "status": "pass",
+    "duration": 201,
+    "notes": "auth.email() = ema_1777568634786_94bn@example.com"
+  },
+  "630": {
+    "status": "pass",
+    "duration": 182,
+    "notes": "JWT claims: sub=5ea118b5, role=authenticated"
+  },
+  "631": {
+    "status": "pass",
+    "duration": 4,
+    "notes": "service_role bypass: 5 rows"
+  },
+  "632": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "JWT encode not in client"
+  },
+  "633": {
+    "status": "pass",
+    "duration": 182,
+    "notes": "Decoded: sub=248b735e"
+  },
+  "634": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "invalid JWT: unable to parse or verify signature, token signature is invalid: signature is invalid"
+  },
+  "635": {
+    "status": "pass",
+    "duration": 1,
+    "notes": "invalid JWT: unable to parse or verify signature, token is malformed: token contains an invalid number of segments"
+  },
+  "636": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "bcrypt is server-side"
+  },
+  "637": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "bcrypt compare is server-side"
+  },
+  "638": {
+    "status": "pass",
+    "duration": 2,
+    "notes": "Rejected: Password should be at least 6 characters."
+  },
+  "639": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Rate limiting is server-side only"
+  },
+  "640": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Rate limiting is server-side only"
+  },
+  "641": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Rate limiting is server-side only"
+  },
+  "642": {
+    "status": "skip",
+    "duration": 0,
+    "error": null,
+    "notes": "Lockout is server-side only"
+  },
+  "643": {
+    "status": "pass",
+    "duration": 85,
+    "notes": "public read works"
+  },
+  "644": {
+    "status": "pass",
+    "duration": 36,
+    "notes": "blocked: Object not found"
+  },
+  "645": {
+    "status": "pass",
+    "duration": 212,
+    "notes": "owner access works"
+  },
+  "646": {
+    "status": "pass",
+    "duration": 22,
+    "notes": "service role bypass works"
+  },
+  "647": {
+    "status": "pass",
+    "duration": 8,
+    "notes": "Size limit: The object exceeded the maximum allowed size"
+  },
+  "648": {
+    "status": "pass",
+    "duration": 16,
+    "notes": "MIME validation: mime type text/plain is not supported"
+  },
+  "649": {
+    "status": "pass",
+    "duration": 17,
+    "notes": "path validation works"
+  }
+}
