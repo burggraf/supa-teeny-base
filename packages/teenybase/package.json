@@ -36,6 +36,96 @@
                 "default": "./dist/worker/index.js"
             }
         },
+        "./worker/supabase": {
+            "import": {
+                "types": "./dist/worker/supabase/index.d.ts",
+                "default": "./dist/worker/supabase/index.js"
+            }
+        },
+        "./worker/supabase/shared/config": {
+            "import": {
+                "types": "./dist/worker/supabase/shared/config.d.ts",
+                "default": "./dist/worker/supabase/shared/config.js"
+            }
+        },
+        "./worker/supabase/auth/schema": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/schema.d.ts",
+                "default": "./dist/worker/supabase/auth/schema.js"
+            }
+        },
+        "./worker/supabase/auth/signup": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/signup.d.ts",
+                "default": "./dist/worker/supabase/auth/signup.js"
+            }
+        },
+        "./worker/supabase/auth/verify": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/verify.d.ts",
+                "default": "./dist/worker/supabase/auth/verify.js"
+            }
+        },
+        "./worker/supabase/auth/token": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/token.d.ts",
+                "default": "./dist/worker/supabase/auth/token.js"
+            }
+        },
+        "./worker/supabase/auth/user": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/user.d.ts",
+                "default": "./dist/worker/supabase/auth/user.js"
+            }
+        },
+        "./worker/supabase/auth/logout": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/logout.d.ts",
+                "default": "./dist/worker/supabase/auth/logout.js"
+            }
+        },
+        "./worker/supabase/auth/otp": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/otp.d.ts",
+                "default": "./dist/worker/supabase/auth/otp.js"
+            }
+        },
+        "./worker/supabase/auth/recover": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/recover.d.ts",
+                "default": "./dist/worker/supabase/auth/recover.js"
+            }
+        },
+        "./worker/supabase/auth/resend": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/resend.d.ts",
+                "default": "./dist/worker/supabase/auth/resend.js"
+            }
+        },
+        "./worker/supabase/auth/settings": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/settings.d.ts",
+                "default": "./dist/worker/supabase/auth/settings.js"
+            }
+        },
+        "./worker/supabase/auth/types": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/types.d.ts",
+                "default": "./dist/worker/supabase/auth/types.js"
+            }
+        },
+        "./worker/supabase/auth/admin/users": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/admin/users.d.ts",
+                "default": "./dist/worker/supabase/auth/admin/users.js"
+            }
+        },
+        "./worker/supabase/auth/admin/generateLink": {
+            "import": {
+                "types": "./dist/worker/supabase/auth/admin/generateLink.d.ts",
+                "default": "./dist/worker/supabase/auth/admin/generateLink.js"
+            }
+        },
         "./node/*": {
             "import": {
                 "types": "./dist/node/*.d.ts",

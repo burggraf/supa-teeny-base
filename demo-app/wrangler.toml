@@ -1,0 +1,7 @@
+name = "supaflare-demo"
+compatibility_date = "2024-08-06"
+pages_build_output_dir = "dist"
+
+[vars]
+# These get injected as env vars at runtime on Cloudflare Pages
+# Set them in the Pages dashboard > Settings > Environment Variables

@@ -155,7 +155,7 @@ export class SupabaseCompatExtension<T extends $Env = $Env> implements $DBExtens
       }
 
       // Inject RLS WITH CHECK for INSERT
-      const rlsWhere = compileRlsExpression(policies, 'INSERT', authCtx, table.name);
+      const rlsWhere = compileRlsExpression(policies, 'INSERT', authCtx, table);
       if (rlsWhere) {
         // For INSERT, we validate after insert by checking if the row matches the policy
         // Simplified: we just proceed and let the policy act as a WHERE filter
@@ -196,7 +196,7 @@ export class SupabaseCompatExtension<T extends $Env = $Env> implements $DBExtens
       const userWhere = buildFilterExpression(req.filters);
 
       // Combine user filter with RLS USING expression
-      const rlsWhere = compileRlsExpression(policies, 'UPDATE', authCtx, table.name);
+      const rlsWhere = compileRlsExpression(policies, 'UPDATE', authCtx, table);
       let whereExpr: string | null = null;
       if (userWhere && rlsWhere) {
         whereExpr = `(${userWhere}) & (${rlsWhere})`;
@@ -238,7 +238,7 @@ export class SupabaseCompatExtension<T extends $Env = $Env> implements $DBExtens
       const userWhere = buildFilterExpression(req.filters);
 
       // Combine user filter with RLS USING expression
-      const rlsWhere = compileRlsExpression(policies, 'DELETE', authCtx, table.name);
+      const rlsWhere = compileRlsExpression(policies, 'DELETE', authCtx, table);
       let whereExpr: string | null = null;
       if (userWhere && rlsWhere) {
         whereExpr = `(${userWhere}) & (${rlsWhere})`;

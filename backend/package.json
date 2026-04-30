@@ -1,0 +1,11 @@
+{
+  "name": "supaflare-backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "hono": "^4.11.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260210.0"
+  }
+}

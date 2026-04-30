@@ -1,0 +1,35 @@
+{
+  "name": "supaflare-backend",
+  "compatibility_date": "2024-08-06",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "worker.ts",
+  "d1_databases": [
+    {
+      "binding": "PRIMARY_DB",
+      "database_name": "supaflare-demo",
+      "database_id": "local-supaflare-demo",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PRIMARY_R2",
+      "bucket_name": "supaflare-demo"
+    }
+  ],
+  "vars": {
+    "DATABASE_SETTINGS": "{\"version\":1,\"tables\":[{\"name\":\"tasks\",\"extensions\":[],\"fields\":[{\"name\":\"id\",\"sqlType\":\"integer\",\"type\":\"number\",\"primaryKey\":true,\"autoIncrement\":true},{\"name\":\"title\",\"sqlType\":\"text\",\"type\":\"text\",\"notNull\":true},{\"name\":\"description\",\"sqlType\":\"text\",\"type\":\"text\"},{\"name\":\"priority\",\"sqlType\":\"text\",\"type\":\"text\"},{\"name\":\"status\",\"sqlType\":\"text\",\"type\":\"text\"},{\"name\":\"due_date\",\"sqlType\":\"text\",\"type\":\"text\"},{\"name\":\"user_id\",\"sqlType\":\"text\",\"type\":\"text\"},{\"name\":\"created_at\",\"sqlType\":\"text\",\"type\":\"text\"},{\"name\":\"updated_at\",\"sqlType\":\"text\",\"type\":\"text\"}]}],\"supabaseCompat\":true,\"jwtSecret\":\"test-jwt-secret-at-least-32-chars!\",\"appUrl\":\"http://127.0.0.1:8787\"}",
+    "SUPAFLARE_JWT_SECRET": "test-jwt-secret-at-least-32-chars!",
+    "SUPAFLARE_ANON_KEY": "sb-anon-test-key",
+    "SUPAFLARE_SERVICE_KEY": "sb-service-test-key",
+    "SUPAFLARE_JWT_EXPIRY": "3600",
+    "SUPAFLARE_SIGNED_URL_EXPIRY": "600"
+  },
+  "dev": {
+    "port": 8787,
+    "local_protocol": "http"
+  },
+  "observability": {
+    "enabled": false
+  }
+}
