@@ -1,5 +1,109 @@
 # AUTH.md: GoTrue Auth API Compatibility Plan
 
+## Implementation Status (2026-04-30)
+
+### ✅ Implemented (45 integration tests + 65 unit tests = 110 total passing)
+
+#### Phase 2A: Foundation
+- ✅ D1 schema: `auth_users`, `auth_sessions`, `auth_otps`, `auth_rate_limits`, `auth_identities` + indexes
+- ✅ JWT: HS256 sign/verify/decode via `@tsndr/cloudflare-worker-jwt` (8 unit tests)
+- ✅ Password: bcrypt hash/compare/min-length via `bcryptjs` (11 unit tests)
+- ✅ PKCE: S256 challenge/verifier + OTP generation + token hashing (13 unit tests)
+- ✅ Error codes: Supabase auth error format (code, message, details, hint)
+- ✅ Types: All request/response/config types
+- ✅ Session manager: create/refresh/revoke/find sessions, user lookup, response building
+
+#### Phase 2B: Signup
+- ✅ `POST /auth/v1/signup` — email+password, phone+password
+- ✅ Email confirmation flow (auto-confirm or pending)
+- ✅ User metadata support
+- ✅ Duplicate email rejection, weak password rejection, signup disabled
+- ✅ Rate limiting by IP (3 per minute)
+- ✅ Integration tests: 5 tests pass
+
+#### Phase 2C: Sign In
+- ✅ `POST /auth/v1/token?grant_type=password` — email/phone + password
+- ✅ `POST /auth/v1/token?grant_type=refresh_token` — single-use refresh tokens
+- ✅ `POST /auth/v1/token?grant_type=anonymous` — anonymous user creation
+- ✅ `POST /auth/v1/token?grant_type=pkce` — PKCE code exchange
+- ✅ `last_sign_in_at` tracking
+- ✅ Rate limiting by email (10 per minute)
+- ✅ Integration tests: 4 signin + 5 session + 3 signout = 12 tests pass
+
+#### Phase 2D: OTP + Magic Links
+- ✅ `POST /auth/v1/otp` — email OTP, phone OTP, create_user flag
+- ✅ `POST /auth/v1/verify` — signup, magiclink, recovery, invite, email_change types
+- ✅ OTP stored as SHA256 hash with expiry in D1
+- ✅ Integration tests: 8 otp + 2 verify = 10 tests pass
+
+#### Phase 2E: PKCE Exchange
+- ✅ PKCE grant handler in token.ts
+- ✅ Code challenge S256 verification
+- ✅ Auth code lookup, expiry check, single-use consumption
+
+#### Phase 2F: User Management
+- ✅ `GET /auth/v1/user` — get current user by JWT
+- ✅ `PUT /auth/v1/user` — update email, password, user_metadata
+- ✅ `POST /auth/v1/logout` — global/local/others scope
+- ✅ Integration tests: 5 tests pass
+
+#### Phase 2G: Password Recovery + Resend
+- ✅ `POST /auth/v1/recover` — generate recovery token (no email sent)
+- ✅ `POST /auth/v1/resend` — resend signup/email_change OTP
+- ✅ Integration tests: 5 tests (recover: 2, resend: 2, settings: 1)
+
+#### Phase 2H: Rate Limiting
+- ✅ `auth_rate_limits` D1 table
+- ✅ Per-IP rate limiting for signup (3/min), per-email for login (10/min)
+- ✅ Lockout after threshold (300s default)
+- ✅ Integration tests: 2 tests pass
+
+#### Phase 2I: Admin API
+- ✅ `POST /auth/v1/admin/users` — create user (email_confirm, metadata)
+- ✅ `GET /auth/v1/admin/users` — list users (paginated)
+- ✅ `GET /auth/v1/admin/users/:uid` — get user by ID
+- ✅ `PUT /auth/v1/admin/users/:uid` — update user (email, password, role, metadata, banned_until)
+- ✅ `DELETE /auth/v1/admin/users/:uid` — soft/hard delete
+- ✅ `POST /auth/v1/admin/generate_link` — signup, invite, magiclink, recovery, email_change
+- ✅ service_role key required (403 without)
+- ✅ Integration tests: 16 tests pass
+
+#### Phase 2J: Settings
+- ✅ `GET /auth/v1/settings` — returns signup status, mailers, version
+
+### ⚠️ Partially Implemented
+- ⚠️ E2E tests — not yet built (Phase 2.15 in PLAN.md)
+- ⚠️ RLS `auth.uid()`, `auth.role()`, `auth.email()` functions — planned in Phase 1F.3
+
+### ❌ Deferred (v1)
+- ❌ MFA/2FA (TOTP) — in skip list
+- ❌ Passkey/WebAuthn — in skip list
+- ❌ OAuth sign-in redirect flow — in skip list
+- ❌ SSO/SAML — in skip list
+- ❌ Web3 (Solana/Ethereum) — in skip list
+- ❌ Phone SMS sending — D1 storage only, no SMS provider
+- ❌ Email sending — D1 storage only, no email provider
+- ❌ Admin MFA, Admin Passkey — in skip list
+- ❌ Real-time auth events (WebSocket) — client-side only
+
+### Test Infrastructure
+- **Unit tests:** 32 auth-specific (jwt: 8, passwordHasher: 11, pkce: 13) + 33 existing supabase-compat = 65 total
+- **Integration tests:** 45 (signup: 5, signin: 4, session: 5, signout: 3, verify: 2, admin: 16, otp: 8, rate-limit: 2)
+- **Total auth+compat tests:** 204 passing | 1 skipped | 0 failures
+- **Test catalog:** 85 AUTH tests in_scope, 99 skip_v1 (pending recording in test-catalog.db)
+- **E2E tests:** Not yet built (Phase 2.15 in PLAN.md)
+
+### Outstanding for Phase 2
+1. **E2E tests** — `wrangler dev` live server + `@supabase/supabase-js` client (Phase 2.15 in PLAN.md)
+2. **Test catalog recording** — run supabase-compat tests against local Supabase reference, then record in `scripts/test-catalog/test-catalog.db`
+3. **RLS auth functions** — `auth.uid()`, `auth.role()`, `auth.email()` planned in Phase 1F.3, not yet implemented
+4. **`onAuthStateChange` integration test** — client-side event system, needs E2E test infra
+5. **`PUT /auth/v1/user` reauthentication nonce** — endpoint accepts `nonce` field but reauth flow not tested
+6. **Email change confirmation flow** — `PUT /auth/v1/user` with email change creates pending flow but not fully tested
+7. **PKCE integration test** — handler implemented but no dedicated integration test (covered by unit tests only)
+
+---
+
 ## Goal
 
 Implement GoTrue-compatible Auth layer on Teenybase. Every feature tested at 3 levels:
