@@ -65,7 +65,13 @@ app.all('/rest/v1/:table', async (c) => {
     const result = await (route.handler as any)(body, params);
     // If handler returned a Response object, forward it
     if (result instanceof Response) return result;
-    return c.json(result);
+    // Handle 204 No Content
+    if (result && typeof result === 'object' && '__status' in result) {
+      return c.body(null, { status: (result as any).__status });
+    }
+    // Determine status: POST = 201 (Created), PATCH/DELETE = 200 (OK)
+    const status = method === 'post' ? 201 : 200;
+    return c.json(result, { status });
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string };
     if (e && typeof e === 'object' && 'status' in e && typeof e.status === 'number') {

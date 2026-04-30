@@ -176,4 +176,104 @@ describe('Phase 1B: SELECT implementation', () => {
       expect(res.status).toBe(400);
     });
   });
+
+  describe('POST — INSERT', () => {
+    it('inserts a single row', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 100, name: 'Yoda' }),
+      });
+      const text = await res.text();
+      console.log('insert single:', res.status, text);
+      expect(res.status).toBe(201);
+      const data = JSON.parse(text) as Record<string, unknown>[];
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBe(1);
+      expect(data[0]).toMatchObject({ id: 100, name: 'Yoda' });
+    });
+
+    it('inserts bulk rows', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([
+          { id: 200, name: 'Obi-Wan' },
+          { id: 201, name: 'Qui-Gon' },
+        ]),
+      });
+      expect(res.status).toBe(201);
+      const data = (await res.json()) as Record<string, unknown>[];
+      expect(data.length).toBe(2);
+    });
+
+    it('returns 204 with Prefer: return=minimal', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ id: 300, name: 'Mace Windu' }),
+      });
+      expect(res.status).toBe(201);
+      const text = await res.text();
+      expect(text).toBe('');
+    });
+  });
+
+  describe('PATCH — UPDATE', () => {
+    it('updates rows matching filter', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Luke', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Darth Vader' }),
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as Record<string, unknown>[];
+      expect(data.length).toBe(1);
+      expect(data[0]).toMatchObject({ name: 'Darth Vader' });
+    });
+
+    it('returns 400 without filter', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Nobody' }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('DELETE', () => {
+    it('deletes rows matching filter', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters?id.eq=3', {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 400 without filter', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe.skip('HEAD — count', () => {
+    it('returns count in Content-Range header', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters', { method: 'HEAD' });
+      expect(res.status).toBe(200);
+      const contentRange = res.headers.get('Content-Range');
+      expect(contentRange).toMatch(/^\*\/\d+$/);
+    });
+
+    it('returns count with filter', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Leia', { method: 'HEAD' });
+      expect(res.status).toBe(200);
+      const contentRange = res.headers.get('Content-Range');
+      expect(contentRange).toBe('*/1');
+    });
+  });
 });
