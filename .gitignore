@@ -39,3 +39,7 @@ tmp/
 
 compose.dev.yaml
 .aibox
+
+# test catalog
+scripts/test-catalog/test-catalog.db
+scripts/test-catalog/test-catalog.db-*
