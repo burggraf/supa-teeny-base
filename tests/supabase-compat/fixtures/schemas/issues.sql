@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS issues (
+  id INTEGER PRIMARY KEY,
+  title TEXT,
+  tags TEXT
+);

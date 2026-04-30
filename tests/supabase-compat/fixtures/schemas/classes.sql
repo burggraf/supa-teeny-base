@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS classes (
+  id INTEGER PRIMARY KEY,
+  name TEXT,
+  days TEXT
+);
