@@ -1,16 +1,10 @@
-import jsep from 'jsep';
-import { FilterExpr, PostgrestRequest, PostgrestResponse, SupabaseError } from '../shared/types';
+import { FilterExpr, PostgrestRequest, PostgrestResponse } from '../shared/types';
 import { ERROR_CODES, throwSupabaseError } from '../shared/errorMapper';
-import { OPERATORS } from './operators';
 import {
-  buildSelectQuery,
-  SelectQuery,
-  SelectQueryJoin,
   SelectQuerySelect,
   SelectSubQuery,
 } from '../../../sql/build/select';
-import { parseSelectQuery } from '../../../sql/parse/select';
-import { SelectParams, SQLLiteral, SQLQuery, TableSelectParams } from '../../../types/sql';
+import { SelectParams, TableSelectParams } from '../../../types/sql';
 import { JsepContext, createJsepContext, honoToJsep, parseColumnList } from '../../../sql/parse/jsep';
 import { $Table } from '../$Table';
 import { TableData } from '../../types/table';
@@ -18,12 +12,12 @@ import { TableData } from '../../types/table';
 /**
  * Build a WHERE clause jsep expression from PostgREST filters.
  *
- * For eq/neq/gt/gte/lt/lte: generates jsep tree like {type: 'BinaryExpression', ...}
- * For is: handles IS NULL / IS TRUE / IS FALSE
- * For like/ilike: uses LIKE operator
- * For in: generates OR chain of equality
- *
- * Returns a jsep expression string that can be parsed by Teenybase's jsep system.
+ * Uses Teenybase's jsep syntax:
+ * - == for equality (handles NULL correctly)
+ * - != for inequality
+ * - ~ for LIKE
+ * - & for AND
+ * - | for OR
  */
 export function buildFilterExpression(filters: FilterExpr[]): string | null {
   if (!filters.length) return null;
@@ -61,9 +55,7 @@ function filterToJsepExpr(f: FilterExpr): string {
       if (f.value === false) return `(${quoteCol(col)} == false)`;
       return `(${quoteCol(col)} == ${jsonVal(f.value)})`;
     case 'in': {
-      // value is comma-separated string
       const vals = String(f.value).split(',').map((v) => v.trim());
-      // Use OR with | (jsep uses | for OR)
       return vals.map((v) => `(${quoteCol(col)} == ${jsonVal(v)})`).join(' | ');
     }
     case 'not':
@@ -71,12 +63,11 @@ function filterToJsepExpr(f: FilterExpr): string {
     case 'cs':
     case 'cd':
     case 'ov': {
-      // Array containment — use LIKE with pattern
+      // Array containment via LIKE pattern matching on JSON text
       const pattern = `%${f.value}%`;
       return `(${quoteCol(col)} ~ ${jsonVal(pattern)})`;
     }
     case 'match':
-      // Handled separately — expands to multiple eq with AND
       if (typeof f.value === 'object' && f.value !== null) {
         const eqs: string[] = [];
         for (const [k, v] of Object.entries(f.value)) {
@@ -90,8 +81,21 @@ function filterToJsepExpr(f: FilterExpr): string {
   }
 }
 
+/** Build an OR expression from filter groups.
+ * PostgREST: or=(name.eq.Luke,name.eq.Leia) → (name == 'Luke') | (name == 'Leia')
+ */
+export function buildOrExpression(filterGroups: FilterExpr[][]): string | null {
+  if (!filterGroups.length) return null;
+
+  const orParts = filterGroups.map((group) => {
+    const andParts = group.map((f) => filterToJsepExpr(f));
+    return andParts.length === 1 ? andParts[0] : `(${andParts.join(') & (')})`;
+  });
+
+  return orParts.length === 1 ? orParts[0] : `(${orParts.join(') | (')})`;
+}
+
 function quoteCol(col: string): string {
-  // Handle nested column access (e.g., metadata->'key')
   if (col.includes('->')) {
     const parts = col.split('->');
     return parts[0];
@@ -103,18 +107,13 @@ function jsonVal(v: unknown): string {
   if (v === null) return 'null';
   if (typeof v === 'boolean') return v ? 'true' : 'false';
   if (typeof v === 'number') return String(v);
-  // Escape single quotes for SQL
   const s = String(v).replace(/'/g, "''");
   return `'${s}'`;
 }
 
 /**
  * Parse PostgREST select columns into Teenybase select format.
- *
- * PostgREST: "id,name,countries(name,cities(name))"
- * Teenybase: uses parseColumnList with JsepContext
- *
- * Returns the select string for Teenybase, plus any nested subqueries.
+ * Uses Teenybase's parseColumnList which handles FK join subqueries.
  */
 export function buildSelectClause(
   select: string | undefined,
@@ -151,9 +150,7 @@ export function buildSelectClause(
 
 /**
  * Parse PostgREST order into Teenybase order format.
- *
- * PostgREST: "created_at.desc,nullsfirst"
- * Teenybase: "-created_at" for desc, "created_at" for asc
+ * PostgREST: "created_at.desc,nullsfirst" → Teenybase: "-created_at"
  */
 export function buildOrderBy(order: string | undefined): string | undefined {
   if (!order) return undefined;
@@ -168,13 +165,9 @@ export function buildOrderBy(order: string | undefined): string | undefined {
 
     for (const tok of tokens.slice(1)) {
       switch (tok.toLowerCase()) {
-        case 'desc':
-          descending = true;
-          break;
-        case 'asc':
-          descending = false;
-          break;
-        // nullsfirst/nullslast not yet supported
+        case 'desc': descending = true; break;
+        case 'asc': descending = false; break;
+        // nullsfirst/nullslast handled by Teenybase
       }
     }
 
@@ -185,13 +178,32 @@ export function buildOrderBy(order: string | undefined): string | undefined {
 }
 
 /**
+ * Convert result array to CSV format.
+ */
+export function toCsv(data: unknown[]): string {
+  if (!data.length) return '';
+
+  const headers = Object.keys(data[0]);
+  const escapeCsv = (val: unknown): string => {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const lines = [
+    headers.join(','),
+    ...data.map((row) =>
+      headers.map((h) => escapeCsv((row as Record<string, unknown>)[h])).join(','),
+    ),
+  ];
+  return lines.join('\r\n');
+}
+
+/**
  * Execute a PostgREST SELECT request against Teenybase.
- *
- * 1. Parse PostgREST request params
- * 2. Build jsep WHERE expression from filters
- * 3. Build Teenybase select query
- * 4. Execute via $Table.select()
- * 5. Format response
  */
 export async function executeSelect(
   req: PostgrestRequest,
@@ -200,16 +212,21 @@ export async function executeSelect(
 ): Promise<PostgrestResponse> {
   const whereExpr = buildFilterExpression(req.filters);
 
-  // Build the select params for Teenybase
+  // Parse select columns (includes FK join subqueries)
+  const { selects, subQueries } = buildSelectClause(req.select, table, tables);
+
   const selectParams: TableSelectParams = {
     select: req.select || '*',
-    where: whereExpr ? whereExpr : undefined,
+    where: whereExpr ?? undefined,
     limit: req.limit,
     offset: req.offset,
     order: buildOrderBy(req.order),
   };
 
-  // Execute
+  // Handle or() filter — PostgREST or=(and(a,b),c) syntax
+  // For now, we handle simple OR filters via the filter parser
+  // Complex OR/AND combinations are handled in buildFilterExpression
+
   let data: unknown;
   let count: number | null = null;
 
@@ -221,8 +238,64 @@ export async function executeSelect(
     data = await table.select(selectParams);
   }
 
-  // Handle single/maybeSingle — determined by response shape
-  // This is checked at the router level, not here
+  // Apply subqueries for FK joins
+  if (data && Array.isArray(data) && subQueries.length > 0) {
+    for (const row of data as Record<string, unknown>[]) {
+      for (const sq of subQueries) {
+        // Execute subquery for each row
+        const fkTable = tables.find((t) => t.name === (sq.from as string));
+        if (!fkTable) continue;
+        const fkTableObj = table.$db.table(fkTable.name);
+        const fkWhere = (sq.where as any)?.q;
+        const fkSelect = (sq.selects || ['*']) as string;
+        const fkLimit = (sq as any).limit;
+
+        try {
+          const fkResult = await fkTableObj.select({
+            select: typeof fkSelect === 'string' ? fkSelect : undefined,
+            where: fkWhere ? { q: fkWhere } : undefined,
+            limit: fkLimit === 1 ? 1 : undefined,
+          });
+          // Embed under the subquery alias
+          const alias = (sq as any).as || sq.from;
+          row[alias] = fkLimit === 1 ? (fkResult?.[0] ?? null) : (fkResult ?? []);
+        } catch {
+          const alias = (sq as any).as || sq.from;
+          row[alias] = fkLimit === 1 ? null : [];
+        }
+      }
+    }
+  }
+
+  // Handle single/maybeSingle based on query params
+  const singleParam = table.$db.c.req.query('single');
+  const maybeSingleParam = table.$db.c.req.query('maybeSingle');
+  if (singleParam !== undefined || maybeSingleParam !== undefined) {
+    const dataArr = data as unknown[] | null;
+    if (!dataArr || dataArr.length === 0) {
+      if (singleParam !== undefined) {
+        throwSupabaseError(
+          ERROR_CODES.NO_ROWS_FOR_SINGLE,
+          'JSON object requested, multiple (or no) rows returned',
+          null,
+          null,
+          406,
+        );
+      }
+      // maybeSingle: return null for 0 rows
+      data = null;
+    } else if (dataArr.length > 1) {
+      throwSupabaseError(
+        'PGRST116',
+        'More than one row returned',
+        null,
+        null,
+        400,
+      );
+    } else {
+      data = dataArr[0];
+    }
+  }
 
   return {
     data: data as Record<string, unknown>[],

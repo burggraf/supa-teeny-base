@@ -9,7 +9,7 @@ import { PostgrestRequest, SupabaseError } from './shared/types';
 import { parsePostgrestRequest } from './postgrest/queryParser';
 import { parsePreferHeader } from './postgrest/preferHeader';
 import { extractAuthContext, AuthContextOptions } from './postgrest/authContext';
-import { executeSelect, buildFilterExpression } from './postgrest/selectHandler';
+import { executeSelect, buildFilterExpression, toCsv } from './postgrest/selectHandler';
 import { $Table } from '../$Table';
 
 /**
@@ -96,6 +96,14 @@ export class SupabaseCompatExtension<T extends $Env = $Env> implements $DBExtens
           headers['Content-Range'] = `*/${result.count}`;
         }
       }
+
+      // CSV output
+      if (req.accept === 'text/csv') {
+        const csv = toCsv((result.data || []) as Record<string, unknown>[]);
+        headers['Content-Type'] = 'text/csv; charset=utf-8';
+        return this.db.c.body(csv, { headers });
+      }
+
       return this.db.c.json(result.data, { headers });
     } catch (err) {
       if (err instanceof Error && 'status' in err) throw err;
@@ -213,8 +221,8 @@ export class SupabaseCompatExtension<T extends $Env = $Env> implements $DBExtens
 
     try {
       const t = this.db.table(table);
-      // HEAD without filters — just count all rows
-      const count = await t.selectCount({});
+      // Count all rows
+      const count = await t.selectCount({ select: '*' });
       const headers: Record<string, string> = { 'Content-Range': `*/${count}` };
       return this.db.c.json(null, { status: 200, headers });
     } catch (err) {

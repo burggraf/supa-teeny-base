@@ -25,6 +25,15 @@ const TEST_DATABASE_SETTINGS = JSON.stringify({
         { name: 'name', sqlType: 'text', type: 'text' },
       ],
     },
+    {
+      name: 'cities',
+      extensions: [],
+      fields: [
+        { name: 'id', sqlType: 'integer', type: 'number' },
+        { name: 'name', sqlType: 'text', type: 'text' },
+        { name: 'country_id', sqlType: 'integer', type: 'number', foreignKey: { table: 'countries', column: 'id' } },
+      ],
+    },
   ],
 });
 

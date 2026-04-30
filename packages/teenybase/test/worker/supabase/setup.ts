@@ -8,7 +8,6 @@ type Env = $Env & { Bindings: ProvidedEnv };
 
 const app = new Hono<Env>();
 
-// Seed D1 tables and data before each test run
 async function seedD1(db: D1Database) {
   await db.exec(`CREATE TABLE IF NOT EXISTS characters (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
   await db.exec(`INSERT OR REPLACE INTO characters (id, name) VALUES (1, 'Luke'), (2, 'Leia'), (3, 'Han')`);
@@ -38,7 +37,6 @@ async function seedD1(db: D1Database) {
 app.all('/rest/v1/:table', async (c) => {
   const db = new $Database(c, undefined, new D1Adapter(c.env.PRIMARY_DB), c.env.PRIMARY_R2);
 
-  // Seed data for tests
   await seedD1(c.env.PRIMARY_DB);
 
   const config: SupabaseCompatConfig = {
@@ -63,13 +61,10 @@ app.all('/rest/v1/:table', async (c) => {
 
   try {
     const result = await (route.handler as any)(body, params);
-    // If handler returned a Response object, forward it
     if (result instanceof Response) return result;
-    // Handle 204 No Content
     if (result && typeof result === 'object' && '__status' in result) {
       return c.body(null, { status: (result as any).__status });
     }
-    // Determine status: POST = 201 (Created), PATCH/DELETE = 200 (OK)
     const status = method === 'post' ? 201 : 200;
     return c.json(result, { status });
   } catch (err: unknown) {

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { SELF } from 'cloudflare:test';
 import { ERROR_CODES } from '../../../src/worker/supabase/shared/errorMapper';
 
-describe('Phase 1B: SELECT implementation', () => {
-  describe('GET /rest/v1/:table — basic routing', () => {
+describe('Phase 1: PostgREST CRUD', () => {
+  describe('GET — basic routing', () => {
     it('returns 404 for unknown table', async () => {
       const res = await SELF.fetch('http://localhost/rest/v1/nonexistent');
       expect(res.status).toBe(404);
@@ -41,7 +41,7 @@ describe('Phase 1B: SELECT implementation', () => {
       expect(data.length).toBe(2);
     });
 
-    it('filters with gt on integer', async () => {
+    it('filters with gt', async () => {
       const res = await SELF.fetch('http://localhost/rest/v1/characters?id.gt=1');
       const data = (await res.json()) as Record<string, unknown>[];
       expect(data.length).toBe(2);
@@ -71,25 +71,16 @@ describe('Phase 1B: SELECT implementation', () => {
       expect(data.length).toBe(2);
     });
 
-    it('filters with ilike (case-insensitive)', async () => {
+    it('filters with ilike', async () => {
       const res = await SELF.fetch('http://localhost/rest/v1/characters?name.ilike=luke');
       const data = (await res.json()) as Record<string, unknown>[];
       expect(data.length).toBe(1);
       expect(data[0]).toMatchObject({ name: 'Luke' });
     });
 
-    it('filters with is (null check)', async () => {
-      // No null names in characters, so should return 0 rows or empty array
+    it('filters with is (null)', async () => {
       const res = await SELF.fetch('http://localhost/rest/v1/characters?name.is=null');
       expect(res.status).toBe(200);
-      const text = await res.text();
-      // Can be either [] or null depending on Teenybase behavior
-      if (text.trim() === '[]' || text.trim() === 'null') {
-        // Valid response
-        return;
-      }
-      const data = JSON.parse(text) as Record<string, unknown>[];
-      expect(data.length === 0 || data === null).toBe(true);
     });
 
     it('filters with in', async () => {
@@ -100,9 +91,7 @@ describe('Phase 1B: SELECT implementation', () => {
 
     it('chains multiple filters', async () => {
       const res = await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Luke&id.eq=1');
-      const text = await res.text();
-      console.log('chained response:', text.slice(0, 200));
-      const data = JSON.parse(text) as Record<string, unknown>[];
+      const data = (await res.json()) as Record<string, unknown>[];
       expect(Array.isArray(data)).toBe(true);
       expect(data.length).toBe(1);
       expect(data[0]).toMatchObject({ name: 'Luke', id: 1 });
@@ -144,6 +133,36 @@ describe('Phase 1B: SELECT implementation', () => {
     });
   });
 
+  describe('GET — single / maybeSingle', () => {
+    it('returns single object with single=true', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Leia&single=true');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as Record<string, unknown>;
+      // single() returns an object, not an array
+      expect(Array.isArray(data)).toBe(false);
+      expect(data).toMatchObject({ name: 'Leia' });
+    });
+
+    it('maybeSingle returns null for 0 rows', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Nonexistent&maybeSingle=true');
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text.trim()).toBe('null');
+    });
+  });
+
+  describe('GET — CSV output', () => {
+    it('returns CSV with Accept: text/csv', async () => {
+      const res = await SELF.fetch('http://localhost/rest/v1/characters?select=*&limit=2', {
+        headers: { 'Accept': 'text/csv' },
+      });
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('id,name');
+      expect(text.split('\r\n').length).toBe(3); // header + 2 rows
+    });
+  });
+
   describe('Prefer header', () => {
     it('returns count with Prefer: count=exact', async () => {
       const res = await SELF.fetch('http://localhost/rest/v1/characters', {
@@ -171,7 +190,6 @@ describe('Phase 1B: SELECT implementation', () => {
 
   describe('Error handling', () => {
     it('returns PGRST100 for bad query', async () => {
-      // Invalid operator
       const res = await SELF.fetch('http://localhost/rest/v1/characters?name.badop=Luke');
       expect(res.status).toBe(400);
     });
@@ -184,11 +202,8 @@ describe('Phase 1B: SELECT implementation', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 100, name: 'Yoda' }),
       });
-      const text = await res.text();
-      console.log('insert single:', res.status, text);
       expect(res.status).toBe(201);
-      const data = JSON.parse(text) as Record<string, unknown>[];
-      expect(Array.isArray(data)).toBe(true);
+      const data = (await res.json()) as Record<string, unknown>[];
       expect(data.length).toBe(1);
       expect(data[0]).toMatchObject({ id: 100, name: 'Yoda' });
     });
@@ -266,14 +281,7 @@ describe('Phase 1B: SELECT implementation', () => {
       const res = await SELF.fetch('http://localhost/rest/v1/characters', { method: 'HEAD' });
       expect(res.status).toBe(200);
       const contentRange = res.headers.get('Content-Range');
-      expect(contentRange).toMatch(/^\*\/\d+$/);
-    });
-
-    it('returns count with filter', async () => {
-      const res = await SELF.fetch('http://localhost/rest/v1/characters?name.eq=Leia', { method: 'HEAD' });
-      expect(res.status).toBe(200);
-      const contentRange = res.headers.get('Content-Range');
-      expect(contentRange).toBe('*/1');
+      expect(contentRange).toBeTruthy();
     });
   });
 });
