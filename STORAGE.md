@@ -106,7 +106,7 @@ We extract **example code** and **parameter/return shapes** from all storage pag
          │        /storage/v1/bucket/*
          ▼
 ┌─────────────────────────────────────────┐
-│  Supa-Teenybase Storage Adapter         │
+│  Supaflare Storage Adapter         │
 │  ┌──────────┬──────────┬──────────────┐ │
 │  │ Bucket   │ Object   │ Signed URL   │ │
 │  │ Routes   │ Routes   │ Generator    │ │
@@ -658,7 +658,7 @@ CREATE INDEX idx_buckets_owner ON storage_buckets(owner);
 
 ### Signed URL Token Format
 
-Signed URLs use HMAC-SHA256 tokens (same secret as auth JWT: `SUPA_TEENY_JWT_SECRET`).
+Signed URLs use HMAC-SHA256 tokens (same secret as auth JWT: `SUPAFLARE_JWT_SECRET`).
 
 ```json
 {
@@ -698,10 +698,10 @@ Signed URLs use HMAC-SHA256 tokens (same secret as auth JWT: `SUPA_TEENY_JWT_SEC
 
 | Variable | Purpose | Test Default |
 |---|---|---|
-| `SUPA_TEENY_JWT_SECRET` | HMAC signing for signed URLs | `"test-jwt-secret-at-least-32-chars!"` |
-| `SUPA_TEENY_SIGNED_URL_EXPIRY` | Default signed URL lifetime (seconds) | `600` (10 min) |
-| `SUPA_TEENY_ANON_KEY` | Public anon key (bucket perms) | `"sb-anon-test-key"` |
-| `SUPA_TEENY_SERVICE_KEY` | Service role key (full access) | `"sb-service-test-key"` |
+| `SUPAFLARE_JWT_SECRET` | HMAC signing for signed URLs | `"test-jwt-secret-at-least-32-chars!"` |
+| `SUPAFLARE_SIGNED_URL_EXPIRY` | Default signed URL lifetime (seconds) | `600` (10 min) |
+| `SUPAFLARE_ANON_KEY` | Public anon key (bucket perms) | `"sb-anon-test-key"` |
+| `SUPAFLARE_SERVICE_KEY` | Service role key (full access) | `"sb-service-test-key"` |
 
 ### Configurable Behavior (via `DatabaseSettings` or env)
 
@@ -916,7 +916,7 @@ describe('signedUrl', () => {
 ```typescript
 // Integration: bucket CRUD via supabase.storage
 import { describe, it, beforeAll } from 'vitest';
-import { createSupaTeenyClient } from '../../helpers/supabaseClient';
+import { createSupaflareClient } from '../../helpers/supabaseClient';
 
 describe('Bucket CRUD', () => {
   it('creates a private bucket with size limit and MIME types', async () => {
@@ -1419,7 +1419,7 @@ Register `/storage/v1/*` routes with Hono:
 - **Binary handling**: Cloudflare Workers handle binary via `ReadableStream`. Request body passthrough to R2.
 - **MIME detection**: Use file extension or `Content-Type` header. Verify against bucket's `allowed_mime_types`.
 - **Size enforcement**: Check `Content-Length` header before reading body. Reject early if exceeds limit.
-- **Signed URLs**: Same JWT secret as auth (`SUPA_TEENY_JWT_SECRET`). Short-lived tokens.
+- **Signed URLs**: Same JWT secret as auth (`SUPAFLARE_JWT_SECRET`). Short-lived tokens.
 - **`toBase64()`**: Client-side sync utility. No server implementation needed. Converts Blob/File/ArrayBuffer to base64 string.
 - **`getPublicUrl()`**: Client-side sync utility. No server implementation needed. Constructs URL string.
 - **Forward compatibility**: R2 storage can migrate to hosted Supabase by changing client URL. Same bucket names, same paths.

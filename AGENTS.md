@@ -2,7 +2,7 @@
 
 ## Project
 
-Supa-Teenybase — Supabase-compatible API layer on Teenybase (D1 + R2 + Cloudflare Workers).
+Supaflare — Supabase-compatible API layer on Teenybase (D1 + R2 + Cloudflare Workers).
 
 ## Stack
 
@@ -33,7 +33,7 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 
 - Extends existing Teenybase auth (`_auth_identities`, `SecretResolver`, `AuthContext`)
 - New D1 tables: `auth_sessions` (refresh tokens), `auth_otps` (one-time tokens), `auth_rate_limits` (brute force protection)
-- JWT: HMAC-SHA256, secret from `SUPA_TEENY_JWT_SECRET` env var
+- JWT: HMAC-SHA256, secret from `SUPAFLARE_JWT_SECRET` env var
 - Password hashing: bcrypt (pure-JS `bcryptjs` fallback for Workers)
 - Email/SMS: tokens stored in D1, **no actual sending** in v1. Use `auth.email.autoConfirm: true` for tests.
 - Rate limiting: per-IP/email tracking in `auth_rate_limits` table
@@ -72,11 +72,11 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 
 | Variable | Purpose | Test Default |
 |---|---|---|
-| `SUPA_TEENY_JWT_SECRET` | JWT signing key / signed URL token | `"test-jwt-secret-at-least-32-chars!"` |
-| `SUPA_TEENY_JWT_EXPIRY` | Token lifetime (seconds) | `3600` |
-| `SUPA_TEENY_ANON_KEY` | Public anon key | `"sb-anon-test-key"` |
-| `SUPA_TEENY_SERVICE_KEY` | Service role key | `"sb-service-test-key"` |
-| `SUPA_TEENY_SIGNED_URL_EXPIRY` | Default signed URL lifetime (s) | `600` (10 min) |
+| `SUPAFLARE_JWT_SECRET` | JWT signing key / signed URL token | `"test-jwt-secret-at-least-32-chars!"` |
+| `SUPAFLARE_JWT_EXPIRY` | Token lifetime (seconds) | `3600` |
+| `SUPAFLARE_ANON_KEY` | Public anon key | `"sb-anon-test-key"` |
+| `SUPAFLARE_SERVICE_KEY` | Service role key | `"sb-service-test-key"` |
+| `SUPAFLARE_SIGNED_URL_EXPIRY` | Default signed URL lifetime (s) | `600` (10 min) |
 
 ## Error Mapping
 

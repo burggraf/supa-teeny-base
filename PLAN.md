@@ -1,4 +1,4 @@
-# Supa-Teenybase: Master Implementation Plan
+# Supaflare: Master Implementation Plan
 
 ## Vision
 
@@ -12,7 +12,7 @@ Supabase-compatible API layer on Teenybase. Frontend code using `@supabase/supab
          │ HTTP: /rest/v1/*  /auth/v1/*  /storage/v1/*
          ▼
 ┌─────────────────────────────────────────┐
-│  Supa-Teenybase Compatibility Layer     │
+│  Supaflare Compatibility Layer     │
 │  ┌───────────┬──────────┬────────────┐  │
 │  │ PostgREST │ GoTrue   │ Storage    │  │
 │  │ Adapter   │ Adapter  │ Adapter    │  │
@@ -84,7 +84,7 @@ Supabase-compatible API layer on Teenybase. Frontend code using `@supabase/supab
 - **Unit tests**: pure functions (parsers, formatters, operator translators) — no D1/worker
 - **Integration tests**: real D1 via `@cloudflare/vitest-pool-workers`, supabase-js client against test Hono app
 - **E2E tests**: spin up `wrangler dev` + real `@supabase/supabase-js` client in Node process
-- Shared test helper: `createSupaTeenyClient()` returns configured `createClient('http://localhost:8787', anonKey)`
+- Shared test helper: `createSupaflareClient()` returns configured `createClient('http://localhost:8787', anonKey)`
 - Reuse existing Teenybase vitest pool config (`test/worker/vitest.config.ts`)
 - Seed helper: runs SQL fixtures against fresh D1 before each test group
 
@@ -369,7 +369,7 @@ Implement: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
 **Tests:** Integration — verify each route dispatches, returns correct status for unauthenticated access.
 
 #### 2A.2 — JWT Builder
-- HMAC-SHA256 signing via `SUPA_TEENY_JWT_SECRET` env var
+- HMAC-SHA256 signing via `SUPAFLARE_JWT_SECRET` env var
 - Claims: `sub` (user UUID), `aud` (role), `role`, `email`, `phone`, `app_metadata`, `user_metadata`, `exp`, `iat`
 - `exp = iat + JWT_EXPIRY` (default 3600s)
 - Use `jose` or `@tsndoo/hono-jwt` library
@@ -571,7 +571,7 @@ Key compatibility requirements:
 - `POST /auth/v1/token` → password grant, refresh token, PKCE exchange
 - `GET/PUT /auth/v1/user` → current user management
 - JWT format matches Supabase: `HS256`, `aud` = role, `role` claim, `app_metadata`/`user_metadata`
-- JWT secret configurable via `SUPA_TEENY_JWT_SECRET` env var
+- JWT secret configurable via `SUPAFLARE_JWT_SECRET` env var
 - Refresh tokens single-use, stored in D1 `auth_sessions`
 - OTP stored in D1 `auth_otps` (no actual email/SMS sending in v1)
 - Rate limiting via D1 `auth_rate_limits` table

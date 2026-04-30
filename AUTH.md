@@ -132,11 +132,11 @@ We extract **example code** and **parameter/return shapes** to create test fixtu
 
 | Variable | Purpose | Example |
 |---|---|---|
-| `SUPA_TEENY_JWT_SECRET` | HMAC-SHA256 signing key for JWTs | `"your-32-char-min-secret-key!"` |
-| `SUPA_TEENY_JWT_EXPIRY` | Access token lifetime in seconds | `3600` (default: 1h) |
-| `SUPA_TEENY_SITE_URL` | Site URL for redirect/callback | `"http://localhost:3000"` |
-| `SUPA_TEENY_ANON_KEY` | Public anon key (for client auth) | `"sb-anon-..."` |
-| `SUPA_TEENY_SERVICE_KEY` | Service role key (bypasses RLS) | `"sb-service-..."` |
+| `SUPAFLARE_JWT_SECRET` | HMAC-SHA256 signing key for JWTs | `"your-32-char-min-secret-key!"` |
+| `SUPAFLARE_JWT_EXPIRY` | Access token lifetime in seconds | `3600` (default: 1h) |
+| `SUPAFLARE_SITE_URL` | Site URL for redirect/callback | `"http://localhost:3000"` |
+| `SUPAFLARE_ANON_KEY` | Public anon key (for client auth) | `"sb-anon-..."` |
+| `SUPAFLARE_SERVICE_KEY` | Service role key (bypasses RLS) | `"sb-service-..."` |
 
 ### Configurable Behavior (via `DatabaseSettings` or env)
 
@@ -518,7 +518,7 @@ Auth middleware runs before each `/auth/v1/*` handler. Populates:
   "external": {},                    // OAuth providers (empty in v1)
   "disable_signup": false,
   "mailers": ["email"],
-  "gotrue_version": "supa-teenybase-v1"
+  "gotrue_version": "supaflare-v1"
 }
 ```
 
@@ -582,7 +582,7 @@ Auth middleware runs before each `/auth/v1/*` handler. Populates:
 
 ### JWT Signing
 
-- **Symmetric (HMAC-SHA256)** — v1 default. Secret from `SUPA_TEENY_JWT_SECRET`.
+- **Symmetric (HMAC-SHA256)** — v1 default. Secret from `SUPAFLARE_JWT_SECRET`.
 - **Asymmetric (JWKS)** — v2. Enables client-side `getClaims()` without network call.
 - Use `@tsndoo/hono-jwt` or `jose` library for JWT operations.
 
@@ -900,7 +900,7 @@ describe('encodeJWT', () => {
 ```typescript
 // Integration: signUp via supabase.auth
 import { describe, it, beforeAll } from 'vitest';
-import { createSupaTeenyClient } from '../../helpers/supabaseClient';
+import { createSupaflareClient } from '../../helpers/supabaseClient';
 
 describe('signUp(email, password)', () => {
   it('returns user with unconfirmed email when email confirm enabled', async () => {
@@ -1078,7 +1078,7 @@ Extract from Supabase docs via Chrome DevTools:
 
 ## Notes
 
-- **JWT signing**: HMAC-SHA256 with secret from `SUPA_TEENY_JWT_SECRET` env var. Simpler than asymmetric for v1.
+- **JWT signing**: HMAC-SHA256 with secret from `SUPAFLARE_JWT_SECRET` env var. Simpler than asymmetric for v1.
 - **Password hashing**: bcrypt (available in Cloudflare Workers via WebAssembly). Use `bcryptjs` pure-JS fallback if needed.
 - **Email sending**: Teenybase doesn't send emails. v1 stores tokens in D1; actual email sending deferred to user's email service integration. Use `auth.email.autoConfirm: true` in tests.
 - **Phone OTP**: D1 storage only. No SMS sending in v1.

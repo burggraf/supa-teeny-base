@@ -216,7 +216,7 @@ describe('parseQueryParams', () => {
 ```typescript
 // Integration: real D1 via vitest-pool-workers
 import { describe, it, beforeAll } from 'vitest';
-import { createSupaTeenyClient } from '../helpers/supabaseClient';
+import { createSupaflareClient } from '../helpers/supabaseClient';
 import { seed } from '../helpers/seed';
 
 describe('eq(column, value)', () => {
@@ -273,7 +273,7 @@ Each implementation sub-phase ships with its tests. TDD flow:
 |------------|-------|
 | **0.1** Routing integration | Integration — route dispatch, 404 fallback |
 | **0.2** Shared types | Unit — type validation (zod schemas if used) |
-| **0.3** Test infra | Helpers: `createSupaTeenyClient()`, `seed()`, `compare()` |
+| **0.3** Test infra | Helpers: `createSupaflareClient()`, `seed()`, `compare()` |
 | **0.4** Error mapping | Unit: `errorMapper.test.ts`. Integration: `error-codes.test.ts` |
 | **1A** Routing + parsing | Unit: `queryParser`, `operators`, `preferHeader`, `authContext` |
 | **1B** SELECT | Integration: `crud/select.test.ts`, `modifiers/*.test.ts` |
