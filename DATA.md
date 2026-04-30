@@ -341,3 +341,30 @@ Extract from Supabase docs via Chrome DevTools:
 - **`overrideTypes`**, **`returns<T>`**: Client-side only. No server changes needed.
 - **`abortSignal`**: Client-side timeout. Server: standard Hono request lifecycle.
 - **Auth/Storage/Realtime/Edge Functions**: Not in DATA.md. Covered by AUTH.md, STORAGE.md, out of scope.
+## Test Catalog
+
+All DATA tests are tracked in `scripts/test-catalog/test-catalog.db` (auto-extracted from Supabase docs).
+
+**Check DATA test status:**
+```bash
+cd scripts/test-catalog
+node catalog.js status --category DATA                      # all DATA tests
+node catalog.js status --category DATA --subcategory select # select tests only
+node catalog.js status --category DATA --subcategory filters
+```
+
+**Record test results:**
+```bash
+# After validating against local Supabase
+node catalog.js run --id 3 --target supabase --status pass
+# After implementing in Supaflare
+node catalog.js run --id 3 --target supaflare --status pass
+```
+
+**DATA report:**
+```bash
+node catalog.js report --category DATA
+node catalog.js report --category DATA --format markdown
+```
+
+**DATA test counts:** 103 in_scope, 92 skip_v1 (range ops, RPC, realtime, edge functions)

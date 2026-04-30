@@ -1089,3 +1089,31 @@ Extract from Supabase docs via Chrome DevTools:
 - **`onAuthStateChange`**: Client-side event system. Server generates correct HTTP responses; events emitted by supabase-js.
 - **Existing Teenybase auth**: Teenybase already has `_auth_identities` table, `SecretResolver`, and basic auth context. GoTrue compat extends these with full user/session/token tables.
 - **Forward compatibility**: All user IDs as UUID text. Timestamps ISO-8601. JWT standard claims. Migrate to hosted Supabase by changing client URL.
+
+## Test Catalog
+
+All AUTH tests are tracked in `scripts/test-catalog/test-catalog.db` (auto-extracted from Supabase docs).
+
+**Check AUTH test status:**
+```bash
+cd scripts/test-catalog
+node catalog.js status --category AUTH                        # all AUTH tests
+node catalog.js status --category AUTH --subcategory signup   # signup tests only
+node catalog.js status --category AUTH --subcategory admin    # admin tests only
+```
+
+**Record test results:**
+```bash
+# After validating against local Supabase
+node catalog.js run --id 25 --target supabase --status pass
+# After implementing in Supaflare
+node catalog.js run --id 25 --target supaflare --status pass
+```
+
+**AUTH report:**
+```bash
+node catalog.js report --category AUTH
+node catalog.js report --category AUTH --format markdown
+```
+
+**AUTH test counts:** 85 in_scope, 99 skip_v1 (MFA, passkey, OAuth server, OAuth admin)

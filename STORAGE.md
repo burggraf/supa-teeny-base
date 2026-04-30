@@ -1425,3 +1425,31 @@ Register `/storage/v1/*` routes with Hono:
 - **Forward compatibility**: R2 storage can migrate to hosted Supabase by changing client URL. Same bucket names, same paths.
 - **Empty bucket before delete**: Supabase requires bucket to be empty before deletion. Enforce at API level. Check R2 listing before delete.
 - **Folder semantics**: Folders are implicit (prefixes). No actual "folder" objects. Distinguish from files by `id: null` in list responses.
+
+## Test Catalog
+
+All STORAGE tests are tracked in `scripts/test-catalog/test-catalog.db` (auto-extracted from Supabase docs).
+
+**Check STORAGE test status:**
+```bash
+cd scripts/test-catalog
+node catalog.js status --category STORAGE                        # all STORAGE tests
+node catalog.js status --category STORAGE --subcategory buckets  # bucket tests only
+node catalog.js status --category STORAGE --subcategory objects  # object tests only
+```
+
+**Record test results:**
+```bash
+# After validating against local Supabase
+node catalog.js run --id 178 --target supabase --status pass
+# After implementing in Supaflare
+node catalog.js run --id 178 --target supaflare --status pass
+```
+
+**STORAGE report:**
+```bash
+node catalog.js report --category STORAGE
+node catalog.js report --category STORAGE --format markdown
+```
+
+**STORAGE test counts:** 42 in_scope, 15 skip_v1 (analytics buckets, vector buckets)

@@ -60,6 +60,50 @@ tests/supabase-compat/            # Supabase compat tests (NEW)
 - **Test fixtures** extracted from Supabase docs (see DATA.md, AUTH.md, STORAGE.md extraction plans).
 - **Auth tests:** set `auth.email.autoConfirm: true` to skip email sending. Seed bcrypt passwords via helper.
 
+## Test Catalog
+
+All Supabase compatibility tests are tracked in a SQLite catalog at `scripts/test-catalog/test-catalog.db`.
+Every tab on every Supabase docs page is auto-extracted into the catalog.
+
+**Extract tests from docs** (run when Supabase docs update):
+```bash
+cd scripts/test-catalog && node catalog.js init && node extract.js
+```
+
+**View test status:**
+```bash
+node catalog.js status                                # all tests, side-by-side supabase vs supaflare
+node catalog.js status --category DATA                # DATA only
+node catalog.js status --category AUTH --subcategory admin  # specific subcategory
+```
+
+**Record test results** (after running tests):
+```bash
+node catalog.js run --id 3 --target supabase --status pass    # validated against reference Supabase
+node catalog.js run --id 3 --target supaflare --status pass   # our implementation passes
+node catalog.js run --id 5 --target supaflare --status fail --error "wrong response"  # failure
+```
+
+**Reports:**
+```bash
+node catalog.js report                            # text summary by category/subcategory
+node catalog.js report --format markdown           # markdown report (for sharing)
+node catalog.js report --target supaflare          # Supaflare implementation only
+```
+
+**Workflow for each feature:**
+1. Find tests in catalog: `node catalog.js status --category DATA --subcategory filters`
+2. Run test against local Supabase → record: `--target supabase --status pass`
+3. Implement feature
+4. Run test against Supaflare → record: `--target supaflare --status pass`
+5. Run report to verify: `node catalog.js report`
+
+**Add new tests** (if extracting misses something):
+```bash
+node catalog.js add --category DATA --subcategory filters --operation eq \
+  --title "Filter: column equals value" --test-code ".eq('name','Luke')"
+```
+
 ## Design Principles
 
 1. **Translation, not fork.** Parse PostgREST → Teenybase internal → reshape response.

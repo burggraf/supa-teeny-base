@@ -87,6 +87,11 @@ Supabase-compatible API layer on Teenybase. Frontend code using `@supabase/supab
 - Shared test helper: `createSupaflareClient()` returns configured `createClient('http://localhost:8787', anonKey)`
 - Reuse existing Teenybase vitest pool config (`test/worker/vitest.config.ts`)
 - Seed helper: runs SQL fixtures against fresh D1 before each test group
+- **Test catalog**: all tests tracked in `scripts/test-catalog/test-catalog.db`. Auto-extracted from Supabase docs.
+  - Extract: `cd scripts/test-catalog && node catalog.js init && node extract.js`
+  - Status: `node catalog.js status --category DATA`
+  - Record result: `node catalog.js run --id N --target supaflare --status pass`
+  - Report: `node catalog.js report`
 
 ### 0.4 — Error Code Mapping
 Map Teenybase errors → Supabase error codes:
