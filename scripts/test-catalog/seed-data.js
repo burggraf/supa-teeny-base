@@ -1,5 +1,5 @@
-// Seed data for test catalog — extracted from DATA.md, AUTH.md, STORAGE.md
-// Run: node scripts/test-catalog/catalog.js seed
+// Seed data — ALL tests from DATA.md, AUTH.md, STORAGE.md
+// Covers every section and tab from Supabase docs pages
 
 export default function seed(db) {
     const insert = db.prepare(`
@@ -9,714 +9,605 @@ export default function seed(db) {
     `);
 
     let count = 0;
-    function add(...args) {
-        insert.run(...args);
+    function add(cat, sub, op, title, desc, url, pri, scope, code, sql, resp) {
+        insert.run(cat, sub, op, title, desc || null, url || null, pri || 'P1', scope || 'in_scope', code || null, sql || null, resp || null);
         count++;
     }
 
-    // ═══════════════════════════════════════════════════
-    // DATA — CRUD: SELECT
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // DATA — SELECT: Fetch data (12 sections)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'crud', 'select-all', 'Select all rows', 'SELECT * FROM table', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
-        `supabase.from('characters').select()`,
+    add('DATA', 'select', 'select-all', 'Getting your data — select all rows', 'Basic SELECT * from table', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data, error } = await supabase.from('characters').select()`,
         `CREATE TABLE characters (id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO characters VALUES (1,'Luke'),(2,'Leia'),(3,'Han');`,
         `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 2, "name": "Leia" }, { "id": 3, "name": "Han" }], "error": null }`);
 
-    add('DATA', 'crud', 'select-columns', 'Select specific columns', 'SELECT col1, col2', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
-        `supabase.from('characters').select('id,name')`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }], "error": null }`);
+    add('DATA', 'select', 'select-columns', 'Selecting specific columns', 'SELECT id,name from table', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data } = await supabase.from('characters').select('id,name')`, null, null);
 
-    add('DATA', 'crud', 'select-nested', 'Select with nested FK join', 'Embedded FK relation', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
-        `supabase.from('cities').select('id,name,countries(name)')`,
-        `CREATE TABLE countries(id INTEGER PRIMARY KEY, name TEXT);\nCREATE TABLE cities(id INTEGER PRIMARY KEY, name TEXT, country_id INTEGER REFERENCES countries(id));\nINSERT INTO countries VALUES(1,'France'),(2,'Japan');\nINSERT INTO cities VALUES(1,'Paris',1),(2,'Tokyo',2);`,
-        `{ "data": [{ "id": 1, "name": "Paris", "countries": { "name": "France" } }], "error": null }`);
+    add('DATA', 'select', 'select-referenced', 'Query referenced tables (FK join)', 'Embedded FK relation via select()', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data } = await supabase.from('cities').select('id,name,countries(name)')`,
+        `CREATE TABLE countries(id INTEGER PRIMARY KEY, name TEXT);\nCREATE TABLE cities(id INTEGER PRIMARY KEY, name TEXT, country_id INTEGER REFERENCES countries(id));\nINSERT INTO countries VALUES(1,'France'),(2,'Japan');\nINSERT INTO cities VALUES(1,'Paris',1),(2,'Tokyo',2);`, null);
 
-    add('DATA', 'crud', 'select-single', 'Select single row', 'Returns error if 0 or >1 rows', 'https://supabase.com/docs/reference/javascript/single', 'P0', 'in_scope',
-        `supabase.from('characters').select().eq('name','Luke').single()`,
-        null,
-        `{ "data": { "id": 1, "name": "Luke" }, "error": null }`);
+    add('DATA', 'select', 'select-referenced-spaces', 'Query referenced tables with spaces in names', 'Table/column names with spaces need quotes', 'https://supabase.com/docs/reference/javascript/select', 'P1', 'in_scope',
+        `const { data } = await supabase.from('user profiles').select('id,"first name",profiles(bio)')`, null, null);
 
-    add('DATA', 'crud', 'select-maybesingle', 'Select maybe single row', 'Returns null if 0 rows, error if >1', 'https://supabase.com/docs/reference/javascript/maybesingle', 'P0', 'in_scope',
-        `supabase.from('characters').select().eq('name','Nobody').maybeSingle()`,
-        null,
-        `{ "data": null, "error": null }`);
+    add('DATA', 'select', 'select-through-join-table', 'Query referenced tables through a join table', 'Many-to-many via junction table', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data } = await supabase.from('students').select('id,name,student_classes(classes(id,name))')`,
+        `CREATE TABLE students(id INTEGER PRIMARY KEY, name TEXT);\nCREATE TABLE classes(id INTEGER PRIMARY KEY, name TEXT);\nCREATE TABLE student_classes(student_id INTEGER, class_id INTEGER, PRIMARY KEY(student_id,class_id));`, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — CRUD: INSERT
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'select', 'select-referenced-multiple', 'Query the same referenced table multiple times', 'Two FKs pointing to same table (e.g. home/away)', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data } = await supabase.from('matches').select('id,home:home_team_id(name),away:away_team_id(name)')`,
+        `CREATE TABLE teams(id INTEGER PRIMARY KEY, name TEXT);\nCREATE TABLE matches(id INTEGER PRIMARY KEY, home_team_id INTEGER REFERENCES teams(id), away_team_id INTEGER REFERENCES teams(id));`, null);
 
-    add('DATA', 'crud', 'insert-single', 'Insert single row', 'POST with single object body', 'https://supabase.com/docs/reference/javascript/insert', 'P0', 'in_scope',
-        `supabase.from('countries').insert({ name: 'Naboo' }).select()`,
-        `CREATE TABLE countries(id INTEGER PRIMARY KEY, name TEXT);`,
-        `{ "data": [{ "id": 1, "name": "Naboo" }], "error": null }`);
+    add('DATA', 'select', 'select-referenced-filter', 'Filtering through referenced tables', 'Filter on FK relation columns', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data } = await supabase.from('cities').select('name,countries(name)').eq('countries.name', 'France')`, null, null);
 
-    add('DATA', 'crud', 'insert-bulk', 'Insert multiple rows', 'POST with array body', 'https://supabase.com/docs/reference/javascript/insert', 'P0', 'in_scope',
-        `supabase.from('countries').insert([{name:'Alderaan'},{name:'Tatooine'}]).select()`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Alderaan" }, { "id": 2, "name": "Tatooine" }], "error": null }`);
+    add('DATA', 'select', 'select-referenced-count', 'Querying referenced table with count', 'Count rows in referenced table', 'https://supabase.com/docs/reference/javascript/select', 'P1', 'in_scope',
+        `const { data } = await supabase.from('countries').select('name,cities(count)')`, null, null);
 
-    add('DATA', 'crud', 'insert-columns', 'Insert with column whitelist', 'columns param restricts inserted cols', 'https://supabase.com/docs/reference/javascript/insert', 'P1', 'in_scope',
-        `supabase.from('users').insert([{username:'alice',message:'hello'}]).select('username')`,
-        `CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT UNIQUE, message TEXT);`,
-        `{ "data": [{ "username": "alice" }], "error": null }`);
+    add('DATA', 'select', 'select-count-option', 'Querying with count option', 'Include total count in response headers', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data, count, error } = await supabase.from('characters').select('*', { count: 'exact' })`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — CRUD: UPDATE
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'select', 'select-json', 'Querying JSON data', 'Query JSON/JSONB columns with ->> operator', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
+        `const { data } = await supabase.from('users').select('id, metadata->>display_name')`, null, null);
 
-    add('DATA', 'crud', 'update', 'Update with filter', 'PATCH with WHERE clause', 'https://supabase.com/docs/reference/javascript/update', 'P0', 'in_scope',
-        `supabase.from('instruments').update({ name: 'piano' }).eq('name', 'harpsichord').select()`,
-        `CREATE TABLE instruments(id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO instruments VALUES(1,'harpsichord');`,
-        `{ "data": [{ "id": 1, "name": "piano" }], "error": null }`);
+    add('DATA', 'select', 'select-referenced-inner', 'Querying referenced table with inner join', 'Only return rows where FK exists', 'https://supabase.com/docs/reference/javascript/select', 'P1', 'in_scope',
+        `const { data } = await supabase.from('cities').select('id,name,countries!inner(name)')`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — CRUD: UPSERT
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'select', 'select-schema', 'Switching schemas per query', 'Query non-public schema', 'https://supabase.com/docs/reference/javascript/select', 'P2', 'in_scope',
+        `const { data } = await supabase.schema('private').from('users').select()`, null, null);
 
-    add('DATA', 'crud', 'upsert-merge', 'Upsert with merge', 'INSERT ... ON CONFLICT DO UPDATE', 'https://supabase.com/docs/reference/javascript/upsert', 'P0', 'in_scope',
-        `supabase.from('users').upsert({ id: 1, username: 'alice', message: 'updated' }, { onConflict: 'username' }).select()`,
-        `CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT UNIQUE, message TEXT);\nINSERT INTO users VALUES(1,'alice','hello');`,
-        `{ "data": [{ "id": 1, "username": "alice", "message": "updated" }], "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // DATA — INSERT (3 tabs)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'crud', 'upsert-ignore', 'Upsert with ignore duplicates', 'INSERT ... ON CONFLICT DO NOTHING', 'https://supabase.com/docs/reference/javascript/upsert', 'P0', 'in_scope',
-        `supabase.from('users').upsert({ username: 'alice', message: 'new' }, { onConflict: 'username', ignoreDuplicates: true }).select()`,
-        null,
-        `{ "data": [], "error": null }`);
+    add('DATA', 'crud', 'insert-create', 'Create a record', 'Basic INSERT single row', 'https://supabase.com/docs/reference/javascript/insert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('countries').insert({ name: 'Naboo' })`,
+        `CREATE TABLE countries(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);`, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — CRUD: DELETE
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'crud', 'insert-create-return', 'Create a record and return it', 'INSERT with .select()', 'https://supabase.com/docs/reference/javascript/insert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('countries').insert({ name: 'Naboo' }).select()`, null, null);
 
-    add('DATA', 'crud', 'delete', 'Delete with filter', 'DELETE with WHERE clause', 'https://supabase.com/docs/reference/javascript/delete', 'P0', 'in_scope',
-        `supabase.from('countries').delete().eq('name', 'Naboo').select()`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Naboo" }], "error": null }`);
+    add('DATA', 'crud', 'insert-bulk', 'Bulk create', 'INSERT multiple rows in one call', 'https://supabase.com/docs/reference/javascript/insert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('countries').insert([{ name: 'Alderaan' }, { name: 'Tatooine' }])`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: Comparison operators
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // DATA — UPDATE (3 tabs)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'filters', 'eq', 'Filter: column equals value', 'WHERE col = val', 'https://supabase.com/docs/reference/javascript/eq', 'P0', 'in_scope',
-        `supabase.from('characters').select().eq('name', 'Leia')`,
-        `CREATE TABLE characters(id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO characters VALUES(1,'Luke'),(2,'Leia'),(3,'Han');`,
-        `{ "data": [{ "id": 2, "name": "Leia" }], "error": null }`);
+    add('DATA', 'crud', 'update-single', 'Updating your data', 'Basic UPDATE with filter', 'https://supabase.com/docs/reference/javascript/update', 'P0', 'in_scope',
+        `const { data } = await supabase.from('instruments').update({ name: 'piano' }).eq('name', 'harpsichord')`,
+        `CREATE TABLE instruments(id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO instruments VALUES(1,'harpsichord');`, null);
 
-    add('DATA', 'filters', 'neq', 'Filter: column not equals', 'WHERE col != val', 'https://supabase.com/docs/reference/javascript/neq', 'P0', 'in_scope',
-        `supabase.from('characters').select().neq('name', 'Luke')`,
-        null,
-        `{ "data": [{ "id": 2, "name": "Leia" }, { "id": 3, "name": "Han" }], "error": null }`);
+    add('DATA', 'crud', 'update-return', 'Update a record and return it', 'UPDATE with .select()', 'https://supabase.com/docs/reference/javascript/update', 'P0', 'in_scope',
+        `const { data } = await supabase.from('instruments').update({ name: 'piano' }).eq('name', 'harpsichord').select()`, null, null);
 
-    add('DATA', 'filters', 'gt', 'Filter: greater than', 'WHERE col > val', 'https://supabase.com/docs/reference/javascript/gt', 'P0', 'in_scope',
-        `supabase.from('characters').select().gt('id', 1)`,
-        null,
-        `{ "data": [{ "id": 2, "name": "Leia" }, { "id": 3, "name": "Han" }], "error": null }`);
+    add('DATA', 'crud', 'update-json', 'Updating JSON data', 'Update JSON/JSONB column fields', 'https://supabase.com/docs/reference/javascript/update', 'P1', 'in_scope',
+        `const { data } = await supabase.from('users').update({ metadata: { display_name: 'Bob' } }).eq('id', 1)`, null, null);
 
-    add('DATA', 'filters', 'gte', 'Filter: greater than or equal', 'WHERE col >= val', 'https://supabase.com/docs/reference/javascript/gte', 'P0', 'in_scope',
-        `supabase.from('characters').select().gte('id', 2)`,
-        null,
-        `{ "data": [{ "id": 2, "name": "Leia" }, { "id": 3, "name": "Han" }], "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // DATA — UPSERT (5 tabs)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'filters', 'lt', 'Filter: less than', 'WHERE col < val', 'https://supabase.com/docs/reference/javascript/lt', 'P0', 'in_scope',
-        `supabase.from('characters').select().lt('id', 3)`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 2, "name": "Leia" }], "error": null }`);
+    add('DATA', 'crud', 'upsert-single', 'Upsert a single row using a unique key', 'INSERT ... ON CONFLICT DO UPDATE', 'https://supabase.com/docs/reference/javascript/upsert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('users').upsert({ id: 1, username: 'alice', message: 'updated' }, { onConflict: 'username' })`,
+        `CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT UNIQUE, message TEXT);\nINSERT INTO users VALUES(1,'alice','hello');`, null);
 
-    add('DATA', 'filters', 'lte', 'Filter: less than or equal', 'WHERE col <= val', 'https://supabase.com/docs/reference/javascript/lte', 'P0', 'in_scope',
-        `supabase.from('characters').select().lte('id', 2)`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 2, "name": "Leia" }], "error": null }`);
+    add('DATA', 'crud', 'upsert-count', 'Upsert with conflict resolution and exact row counting', 'Upsert with count=exact option', 'https://supabase.com/docs/reference/javascript/upsert', 'P1', 'in_scope',
+        `const { data, count } = await supabase.from('users').upsert({ id: 1, username: 'alice' }, { onConflict: 'username', count: 'exact' })`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: Pattern matching
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'crud', 'upsert-basic', 'Upsert your data', 'Basic upsert without return', 'https://supabase.com/docs/reference/javascript/upsert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('users').upsert({ username: 'bob', message: 'hi' })`, null, null);
 
-    add('DATA', 'filters', 'like', 'Filter: LIKE pattern', 'SQL LIKE', 'https://supabase.com/docs/reference/javascript/like', 'P0', 'in_scope',
-        `supabase.from('characters').select().like('name', 'L%')`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 2, "name": "Leia" }], "error": null }`);
+    add('DATA', 'crud', 'upsert-bulk', 'Bulk Upsert your data', 'Multiple rows upsert in one call', 'https://supabase.com/docs/reference/javascript/upsert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('users').upsert([{ username: 'a', message: '1' }, { username: 'b', message: '2' }])`, null, null);
 
-    add('DATA', 'filters', 'ilike', 'Filter: case-insensitive LIKE', 'LIKE COLLATE NOCASE', 'https://supabase.com/docs/reference/javascript/ilike', 'P0', 'in_scope',
-        `supabase.from('characters').select().ilike('name', 'luke')`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }], "error": null }`);
+    add('DATA', 'crud', 'upsert-constraints', 'Upserting into tables with constraints', 'Upsert respecting unique constraints', 'https://supabase.com/docs/reference/javascript/upsert', 'P0', 'in_scope',
+        `const { data } = await supabase.from('users').upsert({ username: 'existing', message: 'new' }, { onConflict: 'username' })`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: Null/Boolean/IN
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // DATA — DELETE (3 tabs)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'filters', 'is', 'Filter: IS NULL/TRUE/FALSE', 'SQL IS NULL/TRUE/FALSE', 'https://supabase.com/docs/reference/javascript/is', 'P0', 'in_scope',
-        `supabase.from('characters').select().is('name', null)`,
-        `CREATE TABLE characters(id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO characters VALUES(1,'Luke'),(2,NULL);`,
-        `{ "data": [{ "id": 2, "name": null }], "error": null }`);
+    add('DATA', 'crud', 'delete-single', 'Delete a single record', 'Basic DELETE with filter', 'https://supabase.com/docs/reference/javascript/delete', 'P0', 'in_scope',
+        `const { data } = await supabase.from('countries').delete().eq('name', 'Naboo')`,
+        `CREATE TABLE countries(id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO countries VALUES(1,'Naboo');`, null);
 
-    add('DATA', 'filters', 'in', 'Filter: IN list', 'WHERE col IN (...)', 'https://supabase.com/docs/reference/javascript/in', 'P0', 'in_scope',
-        `supabase.from('characters').select().in('name', ['Luke','Han'])`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 3, "name": "Han" }], "error": null }`);
+    add('DATA', 'crud', 'delete-return', 'Delete a record and return it', 'DELETE with .select()', 'https://supabase.com/docs/reference/javascript/delete', 'P0', 'in_scope',
+        `const { data } = await supabase.from('countries').delete().eq('name', 'Naboo').select()`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: Logical operators
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'crud', 'delete-bulk', 'Delete multiple records', 'DELETE matching multiple rows', 'https://supabase.com/docs/reference/javascript/delete', 'P0', 'in_scope',
+        `const { data } = await supabase.from('countries').delete().in('name', ['Naboo', 'Alderaan'])`, null, null);
 
-    add('DATA', 'filters', 'not', 'Filter: NOT negation', 'Negate a filter', 'https://supabase.com/docs/reference/javascript/not', 'P0', 'in_scope',
-        `supabase.from('characters').select().not('name', 'eq', 'Luke')`,
-        null,
-        `{ "data": [{ "id": 2, "name": "Leia" }, { "id": 3, "name": "Han" }], "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // DATA — RPC / POSTGRES FUNCTIONS (SKIP v1)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'filters', 'or', 'Filter: OR logic', 'WHERE A OR B', 'https://supabase.com/docs/reference/javascript/or', 'P0', 'in_scope',
-        `supabase.from('characters').select().or('name.eq.Luke,name.eq.Han')`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 3, "name": "Han" }], "error": null }`);
+    add('DATA', 'rpc', 'rpc-no-args', 'Call a Postgres function without arguments', null, 'https://supabase.com/docs/reference/javascript/rpc', 'P2', 'skip_v1', `await supabase.rpc('hello_world')`, null, null);
+    add('DATA', 'rpc', 'rpc-with-args', 'Call a Postgres function with arguments', null, 'https://supabase.com/docs/reference/javascript/rpc', 'P2', 'skip_v1', `await supabase.rpc('add_numbers', { a: 2, b: 3 })`, null, null);
+    add('DATA', 'rpc', 'rpc-bulk', 'Bulk processing via RPC', null, 'https://supabase.com/docs/reference/javascript/rpc', 'P2', 'skip_v1', null, null, null);
+    add('DATA', 'rpc', 'rpc-with-filters', 'Call a Postgres function with filters', null, 'https://supabase.com/docs/reference/javascript/rpc', 'P2', 'skip_v1', null, null, null);
+    add('DATA', 'rpc', 'rpc-readonly', 'Call a read-only Postgres function', null, 'https://supabase.com/docs/reference/javascript/rpc', 'P2', 'skip_v1', null, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: Array/JSONB (emulated)
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // DATA — USING FILTERS: overview (5 tabs)
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'filters', 'contains', 'Filter: array contains', 'JSON array containment via json_each', 'https://supabase.com/docs/reference/javascript/contains', 'P1', 'in_scope',
-        `supabase.from('issues').select().contains('tags', ['bug'])`,
-        `CREATE TABLE issues(id INTEGER PRIMARY KEY, title TEXT, tags TEXT);\nINSERT INTO issues VALUES(1,'Crash','["bug","urgent"]'),(2,'Feature','["enhancement"]');`,
-        `{ "data": [{ "id": 1, "title": "Crash", "tags": ["bug","urgent"] }], "error": null }`);
+    add('DATA', 'filters', 'filter-applying', 'Applying Filters — basic usage', null, 'https://supabase.com/docs/reference/javascript/using-filters', 'P0', 'in_scope', `.eq('name', 'Leia')`, null, null);
+    add('DATA', 'filters', 'filter-chaining', 'Chaining multiple filters', '.eq().gt() — AND logic', 'https://supabase.com/docs/reference/javascript/using-filters', 'P0', 'in_scope', `.eq('name', 'Luke').gt('id', 0)`, null, null);
+    add('DATA', 'filters', 'filter-conditional', 'Conditional Chaining', 'Apply filter only if condition met', 'https://supabase.com/docs/reference/javascript/using-filters', 'P1', 'in_scope', `if (nameFilter) query.eq('name', nameFilter)`, null, null);
+    add('DATA', 'filters', 'filter-json-column', 'Filter by values within a JSON column', 'JSON path filtering', 'https://supabase.com/docs/reference/javascript/using-filters', 'P1', 'in_scope', `.eq('metadata->>display_name', 'Alice')`, null, null);
+    add('DATA', 'filters', 'filter-referenced', 'Filter referenced tables', 'Filter on FK relation columns', 'https://supabase.com/docs/reference/javascript/using-filters', 'P0', 'in_scope', `.eq('countries.name', 'France')`, null, null);
 
-    add('DATA', 'filters', 'containedBy', 'Filter: array contained by', 'Reverse containment', 'https://supabase.com/docs/reference/javascript/containedby', 'P1', 'in_scope',
-        `supabase.from('issues').select().containedBy('tags', ['bug','urgent','feature'])`,
-        null,
-        `{ "data": [{ "id": 1, "title": "Crash", "tags": ["bug","urgent"] }], "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // DATA — INDIVIDUAL FILTER OPERATORS
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'filters', 'overlaps', 'Filter: array overlaps', 'JSON array intersection', 'https://supabase.com/docs/reference/javascript/overlaps', 'P1', 'in_scope',
-        `supabase.from('issues').select().overlaps('tags', ['bug','docs'])`,
-        null,
-        `{ "data": [{ "id": 1, "title": "Crash", "tags": ["bug","urgent"] }], "error": null }`);
+    add('DATA', 'filters', 'eq', 'Column is equal to a value (eq)', null, 'https://supabase.com/docs/reference/javascript/eq', 'P0', 'in_scope', `.eq('name', 'Leia')`, null, null);
+    add('DATA', 'filters', 'neq', 'Column is not equal to a value (neq)', null, 'https://supabase.com/docs/reference/javascript/neq', 'P0', 'in_scope', `.neq('name', 'Luke')`, null, null);
+    add('DATA', 'filters', 'gt', 'Column is greater than a value (gt)', null, 'https://supabase.com/docs/reference/javascript/gt', 'P0', 'in_scope', `.gt('id', 1)`, null, null);
+    add('DATA', 'filters', 'gte', 'Column is greater than or equal to a value (gte)', null, 'https://supabase.com/docs/reference/javascript/gte', 'P0', 'in_scope', `.gte('id', 2)`, null, null);
+    add('DATA', 'filters', 'lt', 'Column is less than a value (lt)', null, 'https://supabase.com/docs/reference/javascript/lt', 'P0', 'in_scope', `.lt('id', 3)`, null, null);
+    add('DATA', 'filters', 'lte', 'Column is less than or equal to a value (lte)', null, 'https://supabase.com/docs/reference/javascript/lte', 'P0', 'in_scope', `.lte('id', 2)`, null, null);
+    add('DATA', 'filters', 'like', 'Column matches a pattern (like)', null, 'https://supabase.com/docs/reference/javascript/like', 'P0', 'in_scope', `.like('name', 'L%')`, null, null);
+    add('DATA', 'filters', 'ilike', 'Column matches a case-insensitive pattern (ilike)', null, 'https://supabase.com/docs/reference/javascript/ilike', 'P0', 'in_scope', `.ilike('name', 'luke')`, null, null);
+    add('DATA', 'filters', 'is', 'Column is a value (is) — NULL/true/false', null, 'https://supabase.com/docs/reference/javascript/is', 'P0', 'in_scope', `.is('name', null)`, null, null);
+    add('DATA', 'filters', 'in', 'Column is in an array (in)', null, 'https://supabase.com/docs/reference/javascript/in', 'P0', 'in_scope', `.in('name', ['Luke', 'Han'])`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: Match / TextSearch
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'filters', 'contains-array', 'Column contains — on array columns', null, 'https://supabase.com/docs/reference/javascript/contains', 'P1', 'in_scope', `.contains('tags', ['bug'])`, null, null);
+    add('DATA', 'filters', 'contains-range', 'Column contains — on range columns — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/contains', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'contains-jsonb', 'Column contains — on jsonb columns', null, 'https://supabase.com/docs/reference/javascript/contains', 'P1', 'in_scope', `.contains('metadata', { key: 'value' })`, null, null);
 
-    add('DATA', 'filters', 'match', 'Filter: multi-EQ shorthand', 'col1=val1 AND col2=val2', 'https://supabase.com/docs/reference/javascript/match', 'P0', 'in_scope',
-        `supabase.from('characters').select().match({ name: 'Luke' })`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }], "error": null }`);
+    add('DATA', 'filters', 'containedBy-array', 'Contained by — on array columns', null, 'https://supabase.com/docs/reference/javascript/containedby', 'P1', 'in_scope', `.containedBy('tags', ['bug', 'urgent'])`, null, null);
+    add('DATA', 'filters', 'containedBy-range', 'Contained by — on range columns — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/containedby', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'containedBy-jsonb', 'Contained by — on jsonb columns', null, 'https://supabase.com/docs/reference/javascript/containedby', 'P1', 'in_scope', null, null, null);
 
-    add('DATA', 'filters', 'textSearch', 'Filter: full-text search (FTS5)', 'SQLite FTS5 basic terms', 'https://supabase.com/docs/reference/javascript/textsearch', 'P2', 'in_scope',
-        `supabase.from('texts').select().textSearch('content', 'cat')`,
-        `CREATE TABLE texts(id INTEGER PRIMARY KEY, content TEXT);\nCREATE VIRTUAL TABLE texts_fts USING fts5(content, content_rowid=id);\nINSERT INTO texts VALUES(1,'The cat sat'),(2,'Dog bark');`,
-        `{ "data": [{ "id": 1, "content": "The cat sat" }], "error": null }`);
+    add('DATA', 'filters', 'rangeGt', 'Greater than a range — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/rangegt', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'rangeGte', 'Greater than or equal to a range — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/rangegte', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'rangeLt', 'Less than a range — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/rangelt', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'rangeLte', 'Less than or equal to a range — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/rangelte', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'rangeAdjacent', 'Mutually exclusive to a range — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/rangeadjacent', 'P1', 'skip_v1', null, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // DATA — FILTERS: SKIP v1 (range operators)
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'filters', 'overlaps-array', 'With a common element — on array columns', null, 'https://supabase.com/docs/reference/javascript/overlaps', 'P1', 'in_scope', `.overlaps('tags', ['bug', 'docs'])`, null, null);
+    add('DATA', 'filters', 'overlaps-range', 'With a common element — on range columns — SKIP v1', null, 'https://supabase.com/docs/reference/javascript/overlaps', 'P1', 'skip_v1', null, null, null);
 
-    add('DATA', 'filters', 'rangeGt', 'Filter: range > (SKIP v1)', 'No SQLite range types', 'https://supabase.com/docs/reference/javascript/rangegt', 'P1', 'skip_v1',
-        `supabase.from('reservations').select().rangeGt('during', '[2000-01-01,2000-12-31)')`,
-        `CREATE TABLE reservations(id INTEGER PRIMARY KEY, during TEXT);`,
-        null);
+    add('DATA', 'filters', 'textSearch-basic', 'Match a string — text search basic', null, 'https://supabase.com/docs/reference/javascript/textsearch', 'P1', 'in_scope', `.textSearch('content', 'cat')`, null, null);
+    add('DATA', 'filters', 'textSearch-phrase', 'Match a string — phrase search', null, 'https://supabase.com/docs/reference/javascript/textsearch', 'P2', 'in_scope', `.textSearch('content', '"fat cat"', { type: 'phrase' })`, null, null);
+    add('DATA', 'filters', 'textSearch-plain', 'Match a string — plain search', null, 'https://supabase.com/docs/reference/javascript/textsearch', 'P1', 'in_scope', `.textSearch('content', 'cat', { type: 'plain' })`, null, null);
+    add('DATA', 'filters', 'textSearch-websearch', 'Match a string — websearch', null, 'https://supabase.com/docs/reference/javascript/textsearch', 'P2', 'in_scope', `.textSearch('content', 'cat OR dog', { type: 'websearch' })`, null, null);
 
-    add('DATA', 'filters', 'rangeGte', 'Filter: range >= (SKIP v1)', null, 'https://supabase.com/docs/reference/javascript/rangegte', 'P1', 'skip_v1', null, null, null);
-    add('DATA', 'filters', 'rangeLt', 'Filter: range < (SKIP v1)', null, 'https://supabase.com/docs/reference/javascript/rangelt', 'P1', 'skip_v1', null, null, null);
-    add('DATA', 'filters', 'rangeLte', 'Filter: range <= (SKIP v1)', null, 'https://supabase.com/docs/reference/javascript/rangelte', 'P1', 'skip_v1', null, null, null);
-    add('DATA', 'filters', 'rangeAdjacent', 'Filter: range adjacent (SKIP v1)', null, 'https://supabase.com/docs/reference/javascript/rangeadjacent', 'P1', 'skip_v1', null, null, null);
+    add('DATA', 'filters', 'match', 'Match an associated value (match)', null, 'https://supabase.com/docs/reference/javascript/match', 'P0', 'in_scope', `.match({ name: 'Luke', id: 1 })`, null, null);
+    add('DATA', 'filters', 'not', "Don't match the filter (not)", null, 'https://supabase.com/docs/reference/javascript/not', 'P0', 'in_scope', `.not('name', 'eq', 'Luke')`, null, null);
+    add('DATA', 'filters', 'or', 'Match at least one filter (or)', null, 'https://supabase.com/docs/reference/javascript/or', 'P0', 'in_scope', `.or('name.eq.Luke,name.eq.Han')`, null, null);
+    add('DATA', 'filters', 'or-and', 'Use or with and — nested OR/AND', null, 'https://supabase.com/docs/reference/javascript/or', 'P1', 'in_scope', `.or('and(name.eq.Luke,id.eq.1),name.eq.Han')`, null, null);
+    add('DATA', 'filters', 'or-referenced', 'Use or on referenced tables', null, 'https://supabase.com/docs/reference/javascript/or', 'P1', 'in_scope', null, null, null);
 
-    // ═══════════════════════════════════════════════════
+    add('DATA', 'filters', 'filter-raw', 'Match the filter — raw PostgREST', null, 'https://supabase.com/docs/reference/javascript/filter', 'P2', 'in_scope', `.filter('name', 'eq', 'Luke')`, null, null);
+    add('DATA', 'filters', 'filter-referenced-raw', 'Match the filter — on a referenced table', null, 'https://supabase.com/docs/reference/javascript/filter', 'P2', 'in_scope', `.filter('countries.name', 'eq', 'France')`, null, null);
+
+    // ═══════════════════════════════════════════════════════════
     // DATA — MODIFIERS
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'modifiers', 'order', 'Order: ascending/descending/nulls', 'ORDER BY col [ASC|DESC] [NULLS FIRST|LAST]', 'https://supabase.com/docs/reference/javascript/order', 'P0', 'in_scope',
-        `supabase.from('characters').select().order('name', { ascending: true })`,
-        null,
-        `{ "data": [{ "id": 3, "name": "Han" }, { "id": 2, "name": "Leia" }, { "id": 1, "name": "Luke" }], "error": null }`);
+    add('DATA', 'modifiers', 'return-after-insert', 'Return data after inserting', null, 'https://supabase.com/docs/reference/javascript/db-modifiers-select', 'P0', 'in_scope', `.upsert({ username: 'a' }).select()`, null, null);
+    add('DATA', 'modifiers', 'order', 'Order the results — basic', null, 'https://supabase.com/docs/reference/javascript/order', 'P0', 'in_scope', `.order('name', { ascending: true })`, null, null);
+    add('DATA', 'modifiers', 'order-referenced', 'Order — on a referenced table', null, 'https://supabase.com/docs/reference/javascript/order', 'P0', 'in_scope', `.order('name', { foreignTable: 'countries' })`, null, null);
+    add('DATA', 'modifiers', 'order-parent-by-ref', 'Order — parent table by referenced table', null, 'https://supabase.com/docs/reference/javascript/order', 'P1', 'in_scope', null, null, null);
+    add('DATA', 'modifiers', 'limit', 'Limit the number of rows', null, 'https://supabase.com/docs/reference/javascript/limit', 'P0', 'in_scope', `.limit(2)`, null, null);
+    add('DATA', 'modifiers', 'limit-referenced', 'Limit — on a referenced table', null, 'https://supabase.com/docs/reference/javascript/limit', 'P1', 'in_scope', `.limit(3, { foreignTable: 'cities' })`, null, null);
+    add('DATA', 'modifiers', 'range', 'Limit the query to a range', null, 'https://supabase.com/docs/reference/javascript/range', 'P0', 'in_scope', `.range(1, 3)`, null, null);
+    add('DATA', 'modifiers', 'abort', 'Abort signal — aborting in-flight', null, 'https://supabase.com/docs/reference/javascript/db-abortsignal', 'P2', 'in_scope', `const c = new AbortController(); supabase.from('t').select().abortSignal(c.signal)`, null, null);
+    add('DATA', 'modifiers', 'timeout', 'Abort signal — set a timeout', null, 'https://supabase.com/docs/reference/javascript/db-abortsignal', 'P2', 'in_scope', `setTimeout(() => c.abort(), 5000)`, null, null);
+    add('DATA', 'modifiers', 'single', 'Retrieve one row (single)', 'Error if 0 or >1 rows', 'https://supabase.com/docs/reference/javascript/single', 'P0', 'in_scope', `.single()`, null, null);
+    add('DATA', 'modifiers', 'maybesingle', 'Retrieve zero or one row (maybeSingle)', 'Null if 0, error if >1', 'https://supabase.com/docs/reference/javascript/maybesingle', 'P0', 'in_scope', `.maybeSingle()`, null, null);
+    add('DATA', 'modifiers', 'csv', 'Retrieve as a CSV', null, 'https://supabase.com/docs/reference/javascript/db-csv', 'P1', 'in_scope', `.csv()`, null, null);
+    add('DATA', 'modifiers', 'strip-nulls', 'Strip null values', null, 'https://supabase.com/docs/reference/javascript/db-strip-nulls', 'P2', 'in_scope', null, null, null);
+    add('DATA', 'modifiers', 'override-type', 'Override type of successful response', null, 'https://supabase.com/docs/reference/javascript/db-overrideTypes', 'P2', 'in_scope', null, null, null);
+    add('DATA', 'modifiers', 'override-type-object', 'Override type of object response', null, 'https://supabase.com/docs/reference/javascript/db-overrideTypes', 'P2', 'in_scope', null, null, null);
+    add('DATA', 'modifiers', 'explain-plan', 'Using explain — get execution plan', null, 'https://supabase.com/docs/reference/javascript/explain', 'P2', 'in_scope', `.explain()`, null, null);
+    add('DATA', 'modifiers', 'explain-analyze', 'Using explain — with analyze and verbose', null, 'https://supabase.com/docs/reference/javascript/explain', 'P2', 'in_scope', `.explain({ analyze: true, verbose: true })`, null, null);
 
-    add('DATA', 'modifiers', 'limit', 'Limit results', 'LIMIT N', 'https://supabase.com/docs/reference/javascript/limit', 'P0', 'in_scope',
-        `supabase.from('characters').select().limit(2)`,
-        null,
-        `{ "data": [{ "id": 1, "name": "Luke" }, { "id": 2, "name": "Leia" }], "error": null }`);
-
-    add('DATA', 'modifiers', 'range', 'Range: offset pagination', 'LIMIT N OFFSET M', 'https://supabase.com/docs/reference/javascript/range', 'P0', 'in_scope',
-        `supabase.from('characters').select().range(1, 2)`,
-        null,
-        `{ "data": [{ "id": 2, "name": "Leia" }, { "id": 3, "name": "Han" }], "error": null }`);
-
-    add('DATA', 'modifiers', 'csv', 'CSV output', 'Accept: text/csv', 'https://supabase.com/docs/reference/javascript/db-csv', 'P1', 'in_scope',
-        `supabase.from('characters').select().csv()`,
-        null,
-        `id,name\n1,Luke\n2,Leia\n3,Han`);
-
-    add('DATA', 'modifiers', 'explain', 'EXPLAIN query plan', 'EXPLAIN QUERY PLAN', 'https://supabase.com/docs/reference/javascript/explain', 'P2', 'in_scope',
-        `supabase.from('characters').select().explain()`,
-        null, null);
-
-    // ═══════════════════════════════════════════════════
-    // DATA — PREFER HEADERS
-    // ═══════════════════════════════════════════════════
-
-    add('DATA', 'prefer', 'return-representation', 'Prefer: return=representation', 'Return inserted/updated rows', 'https://supabase.com/docs/reference/javascript/select', 'P0', 'in_scope',
-        `supabase.from('countries').insert({ name: 'Naboo' }).select()`,
-        null, null);
-
-    add('DATA', 'prefer', 'return-minimal', 'Prefer: return=minimal', 'Return 204 No Content', null, 'P0', 'in_scope',
-        `// No .select() after insert/update/delete`,
-        null, null);
-
-    add('DATA', 'prefer', 'count-exact', 'Prefer: count=exact', 'Include Content-Range with exact count', null, 'P0', 'in_scope',
-        `supabase.from('characters').select('*', { count: 'exact', head: false })`,
-        null, null);
-
-    add('DATA', 'prefer', 'count-planned', 'Prefer: count=planned (fallback exact)', 'Planner stats not in SQLite', null, 'P1', 'in_scope',
-        `supabase.from('characters').select('*', { count: 'planned' })`,
-        null, null);
-
-    // ═══════════════════════════════════════════════════
-    // DATA — RLS
-    // ═══════════════════════════════════════════════════
-
-    add('DATA', 'rls', 'policy-create', 'RLS: Create policy', 'CREATE POLICY → D1 rls_policies', null, 'P0', 'in_scope',
-        `// Policy injection tested via integration`,
-        `CREATE TABLE rls_policies(id TEXT PRIMARY KEY, table_name TEXT, name TEXT, role TEXT, operation TEXT, using_expr TEXT, with_check_expr TEXT, permissive INTEGER DEFAULT 1);`,
-        null);
-
-    add('DATA', 'rls', 'policy-select', 'RLS: SELECT policy injection', 'WHERE clause from USING expr', null, 'P0', 'in_scope', null, null, null);
-
-    add('DATA', 'rls', 'policy-insert', 'RLS: INSERT policy injection', 'WITH CHECK validation on insert', null, 'P0', 'in_scope', null, null, null);
-
-    add('DATA', 'rls', 'auth-uid', 'RLS: auth.uid() function', 'Returns current user uid from JWT', null, 'P0', 'in_scope', null, null, null);
-
-    add('DATA', 'rls', 'auth-role', 'RLS: auth.role() function', 'Returns current role string', null, 'P0', 'in_scope', null, null, null);
-
-    add('DATA', 'rls', 'auth-email', 'RLS: auth.email() function', 'Returns current user email', null, 'P1', 'in_scope', null, null, null);
-
-    add('DATA', 'rls', 'auth-jwt', 'RLS: auth.jwt() function', 'Returns full JWT payload', null, 'P1', 'in_scope', null, null, null);
-
-    add('DATA', 'rls', 'service-role-bypass', 'RLS: service_role bypasses all policies', 'service_role = no RLS injection', null, 'P0', 'in_scope', null, null, null);
-
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
     // DATA — ERROR CODES
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'errors', 'table-not-found', 'Error: PGRST200 table not found', '404 for unknown table', null, 'P0', 'in_scope',
-        `supabase.from('nonexistent').select()`,
-        null,
-        `{ "message": "relation \"nonexistent\" does not exist", "code": "PGRST200", "details": "", "hint": "" }`);
+    add('DATA', 'errors', 'table-not-found', 'Error: PGRST200 table not found', null, null, 'P0', 'in_scope', `supabase.from('nonexistent').select()`, null, `{ "message": "relation does not exist", "code": "PGRST200", "details": "", "hint": "" }`);
+    add('DATA', 'errors', 'bad-query', 'Error: PGRST100 invalid query', null, null, 'P0', 'in_scope', null, null, `{ "message": "column does not exist", "code": "PGRST100", "details": "", "hint": "" }`);
+    add('DATA', 'errors', 'unauthorized', 'Error: PGRST301 unauthorized', null, null, 'P0', 'in_scope', null, null, `{ "message": "JWT expired or invalid", "code": "PGRST301", "details": "", "hint": "" }`);
+    add('DATA', 'errors', 'rls-violation', 'Error: PGRST305 RLS violation', null, null, 'P0', 'in_scope', null, null, `{ "message": "row violates RLS policy", "code": "PGRST305", "details": "", "hint": "" }`);
+    add('DATA', 'errors', 'unique-violation', 'Error: 23505 unique violation', null, null, 'P0', 'in_scope', null, null, `{ "message": "duplicate key value", "code": "23505", "details": "", "hint": "" }`);
 
-    add('DATA', 'errors', 'bad-query', 'Error: PGRST100 invalid query', '400 for bad query', null, 'P0', 'in_scope',
-        `supabase.from('characters').select().eq('nonexistent_col', 'x')`,
-        null,
-        `{ "message": "column \"nonexistent_col\" does not exist", "code": "PGRST100", "details": "", "hint": "" }`);
+    // ═══════════════════════════════════════════════════════════
+    // DATA — PREFER HEADERS
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'errors', 'unauthorized', 'Error: PGRST301 unauthorized', '401 for bad JWT', null, 'P0', 'in_scope', null, null,
-        `{ "message": "JWT expired or invalid", "code": "PGRST301", "details": "", "hint": "" }`);
+    add('DATA', 'prefer', 'return-representation', 'Prefer: return=representation', null, null, 'P0', 'in_scope', `.insert({ name: 'X' }).select()`, null, null);
+    add('DATA', 'prefer', 'return-minimal', 'Prefer: return=minimal', '204 No Content', null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'prefer', 'count-exact', 'Prefer: count=exact', null, null, 'P0', 'in_scope', `.select('*', { count: 'exact' })`, null, null);
+    add('DATA', 'prefer', 'count-planned', 'Prefer: count=planned (fallback exact)', null, null, 'P1', 'in_scope', `.select('*', { count: 'planned' })`, null, null);
 
-    add('DATA', 'errors', 'rls-violation', 'Error: PGRST305 RLS violation', '403 for RLS deny', null, 'P0', 'in_scope', null, null,
-        `{ "message": "new row violates row-level security policy", "code": "PGRST305", "details": "", "hint": "" }`);
+    // ═══════════════════════════════════════════════════════════
+    // DATA — RLS
+    // ═══════════════════════════════════════════════════════════
 
-    add('DATA', 'errors', 'unique-violation', 'Error: 23505 unique violation', '409 for unique conflict', null, 'P0', 'in_scope',
-        `supabase.from('users').insert({ username: 'duplicate' })`,
-        null,
-        `{ "message": "duplicate key value violates unique constraint", "code": "23505", "details": "", "hint": "" }`);
+    add('DATA', 'rls', 'policy-create', 'RLS: Create policy', null, null, 'P0', 'in_scope', null,
+        `CREATE TABLE rls_policies(id TEXT PRIMARY KEY, table_name TEXT, name TEXT, role TEXT, operation TEXT, using_expr TEXT, with_check_expr TEXT, permissive INTEGER DEFAULT 1);`, null);
+    add('DATA', 'rls', 'policy-select', 'RLS: SELECT policy injection', null, null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'policy-insert', 'RLS: INSERT policy injection', null, null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'policy-update', 'RLS: UPDATE policy injection', null, null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'policy-delete', 'RLS: DELETE policy injection', null, null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'auth-uid', 'RLS: auth.uid() function', null, null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'auth-role', 'RLS: auth.role() function', null, null, 'P0', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'auth-email', 'RLS: auth.email() function', null, null, 'P1', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'auth-jwt', 'RLS: auth.jwt() function', null, null, 'P1', 'in_scope', null, null, null);
+    add('DATA', 'rls', 'service-role-bypass', 'RLS: service_role bypasses all policies', null, null, 'P0', 'in_scope', null, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — Signup + Email
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — SIGNUP
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'signup', 'signup-email', 'Signup with email+password', 'POST /auth/v1/signup', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P0', 'in_scope',
-        `supabase.auth.signUp({ email: 'user@example.com', password: 'secure-password' })`,
-        null,
-        `{ "data": { "user": { "id": "uuid", "email": "user@example.com", "email_confirmed_at": null }, "session": null }, "error": null }`);
-
-    add('AUTH', 'signup', 'signup-autoconfirm', 'Signup with auto-confirm', 'email.autoConfirm = true', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P0', 'in_scope',
-        `supabase.auth.signUp({ email: 'user@example.com', password: 'secure-password' })`,
-        null,
-        `{ "data": { "user": { "id": "uuid", "email": "user@example.com", "email_confirmed_at": "2026-04-29T00:00:00Z" }, "session": { "access_token": "...", "refresh_token": "..." } }, "error": null }`);
-
-    add('AUTH', 'signup', 'signup-phone', 'Signup with phone+password', 'Phone-based signup', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P1', 'in_scope',
-        `supabase.auth.signUp({ phone: '+1234567890', password: 'secure-password' })`,
+    add('AUTH', 'signup', 'signup-email-password', 'Signup with email and password', 'POST /auth/v1/signup', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P0', 'in_scope',
+        `const { data, error } = await supabase.auth.signUp({ email: 'user@example.com', password: 'secret' })`,
         null, null);
+    add('AUTH', 'signup', 'signup-phone-password', 'Signup with phone and password', null, 'https://supabase.com/docs/reference/javascript/auth-signup', 'P1', 'in_scope',
+        `await supabase.auth.signUp({ phone: '+1234567890', password: 'secret' })`, null, null);
+    add('AUTH', 'signup', 'signup-redirect-url', 'Signup with email redirect URL', 'Redirect to URL after email confirm', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P1', 'in_scope',
+        `await supabase.auth.signUp({ email: 'user@example.com', password: 'secret', options: { emailRedirectTo: 'https://example.com' } })`, null, null);
+    add('AUTH', 'signup', 'signup-user-metadata', 'Signup with user metadata', 'Include data field in signup', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P0', 'in_scope',
+        `await supabase.auth.signUp({ email: 'user@example.com', password: 'secret', options: { data: { display_name: 'Alice' } } })`, null, null);
+    add('AUTH', 'signup', 'signup-captcha', 'Signup with captcha token', 'Include captcha verification', 'https://supabase.com/docs/reference/javascript/auth-signup', 'P2', 'in_scope',
+        `await supabase.auth.signUp({ email: 'u@e.com', password: 'secret', options: { captchaToken: 'xxx' } })`, null, null);
 
-    add('AUTH', 'signup', 'signup-duplicate', 'Signup rejects duplicate email', '422 user_already_exists', null, 'P0', 'in_scope',
-        `supabase.auth.signUp({ email: 'existing@example.com', password: 'secure' })`,
-        null,
-        `{ "data": null, "error": { "message": "User already registered", "code": "user_already_exists", "status": 422 } }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — SIGN IN WITH PASSWORD
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'signup', 'signup-weak-password', 'Signup rejects weak password', '422 weak_password', null, 'P0', 'in_scope',
-        `supabase.auth.signUp({ email: 'user@example.com', password: '123' })`,
-        null,
-        `{ "data": null, "error": { "message": "Password should be at least 6 characters", "code": "weak_password", "status": 422 } }`);
+    add('AUTH', 'signin', 'signin-email-password', 'Sign in with email and password', 'POST /auth/v1/token?grant_type=password', 'https://supabase.com/docs/reference/javascript/auth-signinwithpassword', 'P0', 'in_scope',
+        `await supabase.auth.signInWithPassword({ email: 'user@example.com', password: 'secret' })`, null, null);
+    add('AUTH', 'signin', 'signin-phone-password', 'Sign in with phone and password', null, 'https://supabase.com/docs/reference/javascript/auth-signinwithpassword', 'P1', 'in_scope',
+        `await supabase.auth.signInWithPassword({ phone: '+1234567890', password: 'secret' })`, null, null);
 
-    add('AUTH', 'signup', 'signup-disabled', 'Signup when disabled', '422 signup_disabled', null, 'P1', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Signups not allowed", "code": "signup_disabled", "status": 422 } }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — SIGN IN WITH OTP
+    // ═══════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — Sign In
-    // ═══════════════════════════════════════════════════
+    add('AUTH', 'otp', 'otp-email', 'Sign in with email OTP', 'POST /auth/v1/otp', 'https://supabase.com/docs/reference/javascript/auth-signinwithotp', 'P0', 'in_scope',
+        `await supabase.auth.signInWithOtp({ email: 'user@example.com' })`, null, null);
+    add('AUTH', 'otp', 'otp-phone', 'Sign in with phone OTP', null, 'https://supabase.com/docs/reference/javascript/auth-signinwithotp', 'P1', 'in_scope',
+        `await supabase.auth.signInWithOtp({ phone: '+1234567890' })`, null, null);
+    add('AUTH', 'otp', 'otp-captcha', 'Sign in with OTP and captcha', null, 'https://supabase.com/docs/reference/javascript/auth-signinwithotp', 'P2', 'in_scope',
+        `await supabase.auth.signInWithOtp({ email: 'u@e.com', options: { captchaToken: 'xxx' } })`, null, null);
 
-    add('AUTH', 'signin', 'signin-password', 'Sign in with email+password', 'POST /auth/v1/token?grant_type=password', 'https://supabase.com/docs/reference/javascript/auth-signinwithpassword', 'P0', 'in_scope',
-        `supabase.auth.signInWithPassword({ email: 'user@example.com', password: 'secure-password' })`,
-        null,
-        `{ "data": { "user": { "id": "uuid", "email": "user@example.com" }, "session": { "access_token": "...", "refresh_token": "...", "expires_in": 3600 } }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — VERIFY OTP
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'signin', 'signin-invalid', 'Sign in rejects wrong password', '400 invalid_credentials', null, 'P0', 'in_scope',
-        `supabase.auth.signInWithPassword({ email: 'user@example.com', password: 'wrong' })`,
-        null,
-        `{ "data": null, "error": { "message": "Invalid login credentials", "code": "invalid_credentials", "status": 400 } }`);
+    add('AUTH', 'otp', 'verify-signup', 'Verify OTP — signup type', 'POST /auth/v1/verify', 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P0', 'in_scope',
+        `await supabase.auth.verifyOtp({ email: 'user@example.com', token: '123456', type: 'email' })`, null, null);
+    add('AUTH', 'otp', 'verify-magiclink', 'Verify OTP — magiclink type', null, 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P0', 'in_scope',
+        `await supabase.auth.verifyOtp({ email: 'user@example.com', token: '123456', type: 'magiclink' })`, null, null);
+    add('AUTH', 'otp', 'verify-recovery', 'Verify OTP — recovery type', null, 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P0', 'in_scope',
+        `await supabase.auth.verifyOtp({ email: 'user@example.com', token: '123456', type: 'recovery' })`, null, null);
+    add('AUTH', 'otp', 'verify-invite', 'Verify OTP — invite type', null, 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P1', 'in_scope',
+        `await supabase.auth.verifyOtp({ email: 'user@example.com', token: '123456', type: 'invite' })`, null, null);
+    add('AUTH', 'otp', 'verify-email-change', 'Verify OTP — email_change type', null, 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P1', 'in_scope',
+        `await supabase.auth.verifyOtp({ email: 'user@example.com', token: '123456', type: 'email_change' })`, null, null);
+    add('AUTH', 'otp', 'verify-phone-change', 'Verify OTP — phone_change type', null, 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P1', 'in_scope',
+        `await supabase.auth.verifyOtp({ phone: '+1234567890', token: '123456', type: 'phone_change' })`, null, null);
 
-    add('AUTH', 'signin', 'signin-anonymous', 'Anonymous sign in', 'Generate random UUID user, aud=anon', 'https://supabase.com/docs/reference/javascript/auth-signinanonymously', 'P1', 'in_scope',
-        `supabase.auth.signInAnonymously()`,
-        null,
-        `{ "data": { "user": { "id": "uuid", "aud": "anon" }, "session": { "access_token": "..." } }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — SIGN OUT
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'signin', 'refresh-token', 'Refresh token exchange', 'Single-use refresh token', 'https://supabase.com/docs/reference/javascript/auth-refreshsession', 'P0', 'in_scope',
-        `supabase.auth.refreshSession()`,
-        null,
-        `{ "data": { "session": { "access_token": "new-token", "refresh_token": "new-refresh" } }, "error": null }`);
+    add('AUTH', 'user', 'signout-global', 'Sign out — global scope', 'POST /auth/v1/logout (default)', 'https://supabase.com/docs/reference/javascript/auth-signout', 'P0', 'in_scope',
+        `await supabase.auth.signOut()`, null, null);
+    add('AUTH', 'user', 'signout-local', 'Sign out — local scope', 'Revoke current session only', 'https://supabase.com/docs/reference/javascript/auth-signout', 'P0', 'in_scope',
+        `await supabase.auth.signOut({ scope: 'local' })`, null, null);
+    add('AUTH', 'user', 'signout-others', 'Sign out — others scope', 'Revoke all other sessions', 'https://supabase.com/docs/reference/javascript/auth-signout', 'P0', 'in_scope',
+        `await supabase.auth.signOut({ scope: 'others' })`, null, null);
 
-    add('AUTH', 'signin', 'refresh-revoked', 'Refresh rejected if revoked', '400 session_not_found', null, 'P0', 'in_scope',
-        `// Attempt refresh after signOut('global')`,
-        null,
-        `{ "data": null, "error": { "message": "Session not found", "code": "session_not_found", "status": 400 } }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — SESSION
+    // ═══════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — OTP + Magic Links
-    // ═══════════════════════════════════════════════════
+    add('AUTH', 'session', 'get-session', 'Get current session', 'Returns session from storage', 'https://supabase.com/docs/reference/javascript/auth-getsession', 'P0', 'in_scope',
+        `const { data } = await supabase.auth.getSession()`, null, null);
+    add('AUTH', 'session', 'refresh-session', 'Refresh session', 'Force refresh before expiry', 'https://supabase.com/docs/reference/javascript/auth-refreshsession', 'P0', 'in_scope',
+        `const { data } = await supabase.auth.refreshSession()`, null, null);
+    add('AUTH', 'session', 'set-session', 'Set session data', 'Set session from custom tokens', 'https://supabase.com/docs/reference/javascript/auth-setsession', 'P0', 'in_scope',
+        `await supabase.auth.setSession({ access_token: '...', refresh_token: '...' })`, null, null);
 
-    add('AUTH', 'otp', 'otp-send', 'Send OTP to email', 'POST /auth/v1/otp', 'https://supabase.com/docs/reference/javascript/auth-signinwithotp', 'P0', 'in_scope',
-        `supabase.auth.signInWithOtp({ email: 'user@example.com' })`,
-        null,
-        `{ "data": { "message_id": null, "user": null }, "error": null }`);
-
-    add('AUTH', 'otp', 'otp-verify', 'Verify OTP token', 'POST /auth/v1/verify', 'https://supabase.com/docs/reference/javascript/auth-verifyotp', 'P0', 'in_scope',
-        `supabase.auth.verifyOtp({ email: 'user@example.com', token: '123456', type: 'email' })`,
-        null,
-        `{ "data": { "user": { "id": "uuid" }, "session": { "access_token": "..." } }, "error": null }`);
-
-    add('AUTH', 'otp', 'otp-expired', 'Reject expired OTP', '400 otp_expired', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Token has expired", "code": "otp_expired", "status": 400 } }`);
-
-    add('AUTH', 'otp', 'magiclink', 'Magic link flow', 'OTP with type=magiclink', null, 'P1', 'in_scope',
-        `supabase.auth.signInWithOtp({ email: 'user@example.com' })`,
-        null, null);
-
-    add('AUTH', 'otp', 'resend', 'Resend OTP', 'POST /auth/v1/resend', 'https://supabase.com/docs/reference/javascript/auth-resend', 'P1', 'in_scope',
-        `supabase.auth.resend({ email: 'user@example.com', type: 'signup' })`,
-        null, null);
-
-    // ═══════════════════════════════════════════════════
-    // AUTH — PKCE
-    // ═══════════════════════════════════════════════════
-
-    add('AUTH', 'pkce', 'pkce-challenge', 'PKCE challenge storage', 'Store code_challenge in auth_otps', null, 'P0', 'in_scope',
-        `// URL param: code_challenge=SHA256(verifier)`,
-        null, null);
-
-    add('AUTH', 'pkce', 'pkce-exchange', 'PKCE token exchange', 'POST /auth/v1/token?grant_type=pkce', 'https://supabase.com/docs/reference/javascript/auth-exchangecodeforsession', 'P0', 'in_scope',
-        `supabase.auth.exchangeCodeForSession('auth-code-from-url')`,
-        null,
-        `{ "data": { "session": { "access_token": "..." } }, "error": null }`);
-
-    add('AUTH', 'pkce', 'pkce-wrong-verifier', 'PKCE rejects wrong verifier', '400 code_verifier_mismatch', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Code verifier mismatch", "code": "code_verifier_mismatch", "status": 400 } }`);
-
-    // ═══════════════════════════════════════════════════
-    // AUTH — User Management
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — USER
+    // ═══════════════════════════════════════════════════════════
 
     add('AUTH', 'user', 'get-user', 'Get current user', 'GET /auth/v1/user with JWT', 'https://supabase.com/docs/reference/javascript/auth-getuser', 'P0', 'in_scope',
-        `supabase.auth.getUser()`,
-        null,
-        `{ "data": { "user": { "id": "uuid", "email": "user@example.com" } }, "error": null }`);
+        `const { data } = await supabase.auth.getUser()`, null, null);
+    add('AUTH', 'user', 'get-user-jwt', 'Get user — from JWT without network', 'Decode claims from verified JWT', 'https://supabase.com/docs/reference/javascript/auth-getuser', 'P1', 'in_scope',
+        `const { data } = await supabase.auth.getUser(jwt)`, null, null);
 
-    add('AUTH', 'user', 'update-user', 'Update current user', 'PUT /auth/v1/user', 'https://supabase.com/docs/reference/javascript/auth-updateuser', 'P0', 'in_scope',
-        `supabase.auth.updateUser({ email: 'new@example.com' })`,
-        null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — UPDATE USER
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'user', 'update-password', 'Update password', 'Rehash on password change', null, 'P0', 'in_scope',
-        `supabase.auth.updateUser({ password: 'new-password' })`,
-        null, null);
+    add('AUTH', 'user', 'update-user-email', 'Update user — email', 'PUT /auth/v1/user (email change flow)', 'https://supabase.com/docs/reference/javascript/auth-updateuser', 'P0', 'in_scope',
+        `await supabase.auth.updateUser({ email: 'new@example.com' })`, null, null);
+    add('AUTH', 'user', 'update-user-password', 'Update user — password', 'Rehash on password change', 'https://supabase.com/docs/reference/javascript/auth-updateuser', 'P0', 'in_scope',
+        `await supabase.auth.updateUser({ password: 'new-password' })`, null, null);
+    add('AUTH', 'user', 'update-user-phone', 'Update user — phone', 'Phone change flow', 'https://supabase.com/docs/reference/javascript/auth-updateuser', 'P1', 'in_scope',
+        `await supabase.auth.updateUser({ phone: '+1234567890' })`, null, null);
+    add('AUTH', 'user', 'update-user-metadata', 'Update user — metadata', 'Update user_metadata', 'https://supabase.com/docs/reference/javascript/auth-updateuser', 'P0', 'in_scope',
+        `await supabase.auth.updateUser({ data: { display_name: 'Alice' } })`, null, null);
+    add('AUTH', 'user', 'update-user-reauth', 'Update user — requires reauthentication', 'Sensitive ops need reauth nonce', 'https://supabase.com/docs/reference/javascript/auth-updateuser', 'P1', 'in_scope',
+        `await supabase.auth.reauthenticate(); await supabase.auth.updateUser({ email: 'new@e.com' })`, null, null);
 
-    add('AUTH', 'user', 'update-metadata', 'Update user metadata', 'Update user_metadata field', null, 'P0', 'in_scope',
-        `supabase.auth.updateUser({ data: { display_name: 'Alice' } })`,
-        null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — ANONYMOUS SIGN IN
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'user', 'signout', 'Sign out (all scopes)', 'POST /auth/v1/logout', 'https://supabase.com/docs/reference/javascript/auth-signout', 'P0', 'in_scope',
-        `supabase.auth.signOut()`,
-        null,
-        `{ "data": null, "error": null }`);
+    add('AUTH', 'signin', 'signin-anonymous', 'Anonymous sign in', 'Generate random UUID, aud=anon', 'https://supabase.com/docs/reference/javascript/auth-signinanonymously', 'P1', 'in_scope',
+        `await supabase.auth.signInAnonymously()`, null, null);
+    add('AUTH', 'signin', 'signin-anonymous-metadata', 'Anonymous sign in with metadata', 'Include data on anonymous user', 'https://supabase.com/docs/reference/javascript/auth-signinanonymously', 'P2', 'in_scope',
+        `await supabase.auth.signInAnonymously({ options: { data: { role: 'guest' } } })`, null, null);
 
-    add('AUTH', 'user', 'signout-local', 'Sign out current session only', 'scope=local', null, 'P1', 'in_scope',
-        `supabase.auth.signOut({ scope: 'local' })`,
-        null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — PASSWORD RECOVERY
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'user', 'signout-others', 'Sign out other sessions', 'scope=others', null, 'P1', 'in_scope',
-        `supabase.auth.signOut({ scope: 'others' })`,
-        null, null);
+    add('AUTH', 'recovery', 'recovery-request', 'Reset password for email', 'POST /auth/v1/recover', 'https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail', 'P0', 'in_scope',
+        `await supabase.auth.resetPasswordForEmail('user@example.com')`, null, null);
+    add('AUTH', 'recovery', 'recovery-redirect', 'Reset password with redirect URL', 'Include redirectTo option', 'https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail', 'P0', 'in_scope',
+        `await supabase.auth.resetPasswordForEmail('user@example.com', { redirectTo: 'https://example.com/reset' })`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — Password Recovery
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — PKCE
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'recovery', 'recovery-request', 'Request password recovery', 'POST /auth/v1/recover', 'https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail', 'P0', 'in_scope',
-        `supabase.auth.resetPasswordForEmail('user@example.com')`,
-        null, null);
+    add('AUTH', 'pkce', 'pkce-exchange', 'Exchange code for session', 'POST /auth/v1/token?grant_type=pkce', 'https://supabase.com/docs/reference/javascript/auth-exchangecodeforsession', 'P0', 'in_scope',
+        `await supabase.auth.exchangeCodeForSession('auth-code-from-url')`, null, null);
 
-    add('AUTH', 'recovery', 'recovery-verify', 'Verify recovery token', 'Via POST /auth/v1/verify type=recovery', null, 'P0', 'in_scope', null, null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — RESEND
+    // ═══════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — Events
-    // ═══════════════════════════════════════════════════
+    add('AUTH', 'otp', 'resend-signup', 'Resend — signup type', 'POST /auth/v1/resend', 'https://supabase.com/docs/reference/javascript/auth-resend', 'P1', 'in_scope',
+        `await supabase.auth.resend({ email: 'user@example.com', type: 'signup' })`, null, null);
+    add('AUTH', 'otp', 'resend-email-change', 'Resend — email_change type', null, 'https://supabase.com/docs/reference/javascript/auth-resend', 'P1', 'in_scope',
+        `await supabase.auth.resend({ email: 'user@example.com', type: 'email_change' })`, null, null);
+    add('AUTH', 'otp', 'resend-phone-change', 'Resend — phone_change type', null, 'https://supabase.com/docs/reference/javascript/auth-resend', 'P2', 'in_scope',
+        `await supabase.auth.resend({ phone: '+1234567890', type: 'phone_change' })`, null, null);
+    add('AUTH', 'otp', 'resend-captcha', 'Resend with captcha token', null, 'https://supabase.com/docs/reference/javascript/auth-resend', 'P2', 'in_scope', null, null, null);
 
-    add('AUTH', 'events', 'onAuthStateChange', 'Auth state change events', 'INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED', 'https://supabase.com/docs/reference/javascript/auth-onauthstatechange', 'P0', 'in_scope',
-        `supabase.auth.onAuthStateChange((event, session) => { ... })`,
-        null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — REAUTHENTICATION
+    // ═══════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — Rate Limiting
-    // ═══════════════════════════════════════════════════
+    add('AUTH', 'user', 'reauthenticate', 'Send reauthentication nonce', 'POST /auth/v1/reauthenticate', 'https://supabase.com/docs/reference/javascript/auth-reauthentication', 'P1', 'in_scope',
+        `await supabase.auth.reauthenticate()`, null, null);
 
-    add('AUTH', 'rate-limit', 'rate-signup', 'Rate limit signup', '3 per minute per IP', null, 'P1', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Too many requests", "code": "lockout_active", "status": 429 } }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — EVENTS
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'rate-limit', 'rate-login', 'Rate limit login', '10 per minute per IP', null, 'P1', 'in_scope', null, null, null);
+    add('AUTH', 'events', 'onAuthStateChange', 'Listen to auth state changes', 'INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED', 'https://supabase.com/docs/reference/javascript/auth-onauthstatechange', 'P0', 'in_scope',
+        `supabase.auth.onAuthStateChange((event, session) => { ... })`, null, null);
 
-    add('AUTH', 'rate-limit', 'rate-otp', 'Rate limit OTP', '5 per minute per email', null, 'P1', 'in_scope', null, null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — GET CLAIMS
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'rate-limit', 'lockout', 'Lockout enforcement', '300s lockout after threshold', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Security lockout active", "code": "lockout_active", "status": 429 } }`);
+    add('AUTH', 'jwt', 'get-claims', 'Get user claims from verified JWT', 'Decode JWT without network call', 'https://supabase.com/docs/reference/javascript/auth-getclaims', 'P1', 'in_scope',
+        `const { data } = await supabase.auth.getClaims()`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // AUTH — Admin API
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — AUTO REFRESH
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'admin', 'admin-create-user', 'Admin create user', 'POST /auth/v1/admin/users', 'https://supabase.com/docs/reference/javascript/auth-admin-createuser', 'P0', 'in_scope',
-        `supabase.auth.admin.createUser({ email: 'admin@example.com', email_confirm: true })`,
-        null, null);
+    add('AUTH', 'session', 'start-auto-refresh', 'Start auto-refresh session (non-browser)', null, 'https://supabase.com/docs/reference/javascript/auth-startautorefresh', 'P2', 'in_scope',
+        `await supabase.auth.startAutoRefresh()`, null, null);
+    add('AUTH', 'session', 'stop-auto-refresh', 'Stop auto-refresh session (non-browser)', null, 'https://supabase.com/docs/reference/javascript/auth-stopautorefresh', 'P2', 'in_scope',
+        `await supabase.auth.stopAutoRefresh()`, null, null);
 
-    add('AUTH', 'admin', 'admin-list-users', 'Admin list users', 'GET /auth/v1/admin/users (paginated)', 'https://supabase.com/docs/reference/javascript/auth-admin-listusers', 'P0', 'in_scope',
-        `supabase.auth.admin.listUsers()`,
-        null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — INITIALIZE
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'admin', 'admin-get-user', 'Admin get user by ID', 'GET /auth/v1/admin/users/{uid}', 'https://supabase.com/docs/reference/javascript/auth-admin-getuserbyid', 'P0', 'in_scope',
-        `supabase.auth.admin.getUserById('user-uuid')`,
-        null, null);
+    add('AUTH', 'session', 'initialize', 'Initialize client session', 'Client init', 'https://supabase.com/docs/reference/javascript/auth-initialize', 'P2', 'in_scope',
+        `await supabase.auth.initialize()`, null, null);
 
-    add('AUTH', 'admin', 'admin-update-user', 'Admin update user', 'PUT /auth/v1/admin/users/{uid}', 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P0', 'in_scope',
-        `supabase.auth.admin.updateUserById('user-uuid', { email: 'new@example.com' })`,
-        null, null);
-
-    add('AUTH', 'admin', 'admin-delete-user', 'Admin delete user', 'DELETE /auth/v1/admin/users/{uid}', 'https://supabase.com/docs/reference/javascript/auth-admin-deleteuser', 'P0', 'in_scope',
-        `supabase.auth.admin.deleteUser('user-uuid')`,
-        null, null);
-
-    add('AUTH', 'admin', 'admin-generate-link', 'Admin generate link', 'POST /auth/v1/admin/generate_link', 'https://supabase.com/docs/reference/javascript/auth-admin-generatelink', 'P0', 'in_scope',
-        `supabase.auth.admin.generateLink({ type: 'signup', email: 'user@example.com' })`,
-        null, null);
-
-    add('AUTH', 'admin', 'admin-requires-service-role', 'Admin routes reject anon key', '401 for anon on admin routes', null, 'P0', 'in_scope', null, null, null);
-
-    // ═══════════════════════════════════════════════════
-    // AUTH — Settings
-    // ═══════════════════════════════════════════════════
-
-    add('AUTH', 'settings', 'get-settings', 'Get project settings', 'GET /auth/v1/settings', 'https://supabase.com/docs/reference/javascript/auth-api', 'P1', 'in_scope',
-        `// GET /auth/v1/settings`,
-        null, null);
-
-    // ═══════════════════════════════════════════════════
-    // AUTH — JWT / Password Hashing (Unit tests)
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — JWT (Unit)
+    // ═══════════════════════════════════════════════════════════
 
     add('AUTH', 'jwt', 'jwt-encode', 'JWT encode claims', 'HS256 sign with correct claims', null, 'P0', 'in_scope', null, null, null);
-
     add('AUTH', 'jwt', 'jwt-decode', 'JWT decode and validate', 'Verify signature + expiry', null, 'P0', 'in_scope', null, null, null);
-
     add('AUTH', 'jwt', 'jwt-expiry', 'JWT expiry rejection', 'Token past exp = 401', null, 'P0', 'in_scope', null, null, null);
-
     add('AUTH', 'jwt', 'jwt-wrong-secret', 'JWT wrong secret rejection', 'Different secret = invalid sig', null, 'P0', 'in_scope', null, null, null);
 
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — PASSWORD HASHING (Unit)
+    // ═══════════════════════════════════════════════════════════
+
     add('AUTH', 'password', 'bcrypt-hash', 'bcrypt password hash', 'Produce valid bcrypt hash', null, 'P0', 'in_scope', null, null, null);
+    add('AUTH', 'password', 'bcrypt-compare', 'bcrypt compare match/mismatch', null, null, 'P0', 'in_scope', null, null, null);
+    add('AUTH', 'password', 'password-min-length', 'Password minimum length validation', null, null, 'P0', 'in_scope', null, null, null);
 
-    add('AUTH', 'password', 'bcrypt-compare', 'bcrypt compare match/mismatch', 'Correct = true, wrong = false', null, 'P0', 'in_scope', null, null, null);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — RATE LIMITING
+    // ═══════════════════════════════════════════════════════════
 
-    add('AUTH', 'password', 'password-min-length', 'Password minimum length validation', 'Default 6 chars', null, 'P0', 'in_scope', null, null, null);
+    add('AUTH', 'rate-limit', 'rate-signup', 'Rate limit signup', '3/min per IP', null, 'P1', 'in_scope', null, null, null);
+    add('AUTH', 'rate-limit', 'rate-login', 'Rate limit login', '10/min per IP', null, 'P1', 'in_scope', null, null, null);
+    add('AUTH', 'rate-limit', 'rate-otp', 'Rate limit OTP', '5/min per email', null, 'P1', 'in_scope', null, null, null);
+    add('AUTH', 'rate-limit', 'lockout', 'Lockout enforcement', '300s lockout after threshold', null, 'P0', 'in_scope', null, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Buckets
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — ADMIN
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'buckets', 'list-buckets', 'List all buckets', 'GET /storage/v1/bucket/list', 'https://supabase.com/docs/reference/javascript/storage-listbuckets', 'P0', 'in_scope',
-        `supabase.storage.listBuckets()`,
-        `CREATE TABLE storage_buckets(id TEXT PRIMARY KEY, name TEXT, owner TEXT, public INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, file_size_limit INTEGER, allowed_mime_types TEXT);`,
-        `{ "data": [{ "id": "avatars", "name": "avatars", "public": false }], "error": null }`);
+    add('AUTH', 'admin', 'admin-get-user', 'Admin get user by ID', 'GET /auth/v1/admin/users/{uid}', 'https://supabase.com/docs/reference/javascript/auth-admin-getuserbyid', 'P0', 'in_scope',
+        `supabase.auth.admin.getUserById('uid')`, null, null);
+    add('AUTH', 'admin', 'admin-list-users', 'Admin list users', 'GET /auth/v1/admin/users (paginated)', 'https://supabase.com/docs/reference/javascript/auth-admin-listusers', 'P0', 'in_scope',
+        `supabase.auth.admin.listUsers()`, null, null);
+    add('AUTH', 'admin', 'admin-list-users-paginated', 'Admin list users — paginated', 'With page/perPage params', 'https://supabase.com/docs/reference/javascript/auth-admin-listusers', 'P0', 'in_scope',
+        `supabase.auth.admin.listUsers({ page: 2, perPage: 25 })`, null, null);
+    add('AUTH', 'admin', 'admin-create-user', 'Admin create user', 'POST /auth/v1/admin/users', 'https://supabase.com/docs/reference/javascript/auth-admin-createuser', 'P0', 'in_scope',
+        `supabase.auth.admin.createUser({ email: 'admin@e.com' })`, null, null);
+    add('AUTH', 'admin', 'admin-create-user-confirm', 'Admin create user — auto confirm email', 'email_confirm: true', 'https://supabase.com/docs/reference/javascript/auth-admin-createuser', 'P0', 'in_scope',
+        `supabase.auth.admin.createUser({ email: 'a@e.com', email_confirm: true })`, null, null);
+    add('AUTH', 'admin', 'admin-create-user-metadata', 'Admin create user — with metadata', 'app_metadata + user_metadata', 'https://supabase.com/docs/reference/javascript/auth-admin-createuser', 'P0', 'in_scope',
+        `supabase.auth.admin.createUser({ email: 'a@e.com', user_metadata: { name: 'A' }, app_metadata: { provider: 'email' } })`, null, null);
+    add('AUTH', 'admin', 'admin-delete-user', 'Admin delete user', 'DELETE /auth/v1/admin/users/{uid}', 'https://supabase.com/docs/reference/javascript/auth-admin-deleteuser', 'P0', 'in_scope',
+        `supabase.auth.admin.deleteUser('uid')`, null, null);
+    add('AUTH', 'admin', 'admin-update-user-email', 'Admin update user — email', 'PUT /auth/v1/admin/users/{uid}', 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P0', 'in_scope',
+        `supabase.auth.admin.updateUserById('uid', { email: 'new@e.com' })`, null, null);
+    add('AUTH', 'admin', 'admin-update-user-password', 'Admin update user — password', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P0', 'in_scope',
+        `supabase.auth.admin.updateUserById('uid', { password: 'new' })`, null, null);
+    add('AUTH', 'admin', 'admin-update-user-role', 'Admin update user — role', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P1', 'in_scope',
+        `supabase.auth.admin.updateUserById('uid', { role: 'service_role' })`, null, null);
+    add('AUTH', 'admin', 'admin-update-user-banned', 'Admin update user — banned_until', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P1', 'in_scope',
+        `supabase.auth.admin.updateUserById('uid', { banned_until: '2026-12-31T00:00:00Z' })`, null, null);
+    add('AUTH', 'admin', 'admin-update-user-metadata', 'Admin update user — metadata', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P0', 'in_scope',
+        `supabase.auth.admin.updateUserById('uid', { user_metadata: { name: 'B' } })`, null, null);
+    add('AUTH', 'admin', 'admin-update-user-app-meta', 'Admin update user — app_metadata', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P1', 'in_scope', null, null, null);
+    add('AUTH', 'admin', 'admin-update-user-phone', 'Admin update user — phone', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P1', 'in_scope', null, null, null);
+    add('AUTH', 'admin', 'admin-update-user-confirm', 'Admin update user — email_confirm', null, 'https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid', 'P0', 'in_scope', null, null, null);
+    add('AUTH', 'admin', 'admin-invite-user', 'Admin invite user by email', 'POST /auth/v1/admin/users with invite', 'https://supabase.com/docs/reference/javascript/auth-admin-inviteuserbyemail', 'P0', 'in_scope',
+        `supabase.auth.admin.inviteUserByEmail('invited@e.com')`, null, null);
+    add('AUTH', 'admin', 'admin-generate-link-signup', 'Admin generate link — signup', 'POST /auth/v1/admin/generate_link', 'https://supabase.com/docs/reference/javascript/auth-admin-generatelink', 'P0', 'in_scope',
+        `supabase.auth.admin.generateLink({ type: 'signup', email: 'u@e.com' })`, null, null);
+    add('AUTH', 'admin', 'admin-generate-link-invite', 'Admin generate link — invite', null, 'https://supabase.com/docs/reference/javascript/auth-admin-generatelink', 'P0', 'in_scope',
+        `supabase.auth.admin.generateLink({ type: 'invite', email: 'u@e.com' })`, null, null);
+    add('AUTH', 'admin', 'admin-generate-link-magiclink', 'Admin generate link — magiclink', null, 'https://supabase.com/docs/reference/javascript/auth-admin-generatelink', 'P0', 'in_scope',
+        `supabase.auth.admin.generateLink({ type: 'magiclink', email: 'u@e.com' })`, null, null);
+    add('AUTH', 'admin', 'admin-generate-link-recovery', 'Admin generate link — recovery', null, 'https://supabase.com/docs/reference/javascript/auth-admin-generatelink', 'P0', 'in_scope',
+        `supabase.auth.admin.generateLink({ type: 'recovery', email: 'u@e.com' })`, null, null);
+    add('AUTH', 'admin', 'admin-generate-link-email-change', 'Admin generate link — email_change', null, 'https://supabase.com/docs/reference/javascript/auth-admin-generatelink', 'P0', 'in_scope',
+        `supabase.auth.admin.generateLink({ type: 'email_change', email: 'u@e.com', options: { newEmail: 'new@e.com' } })`, null, null);
+    add('AUTH', 'admin', 'admin-signout', 'Admin sign out', 'POST /auth/v1/admin/signout', 'https://supabase.com/docs/reference/javascript/auth-admin-signout', 'P1', 'in_scope',
+        `supabase.auth.admin.signOut('jwt', 'global')`, null, null);
+    add('AUTH', 'admin', 'admin-requires-service-role', 'Admin routes reject anon key', '401 for anon', null, 'P0', 'in_scope', null, null, null);
 
-    add('STORAGE', 'buckets', 'get-bucket', 'Get bucket by ID', 'GET /storage/v1/bucket/{id}', 'https://supabase.com/docs/reference/javascript/storage-getbucket', 'P0', 'in_scope',
-        `supabase.storage.getBucket('avatars')`,
-        null,
-        `{ "data": { "id": "avatars", "name": "avatars", "public": false }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — SETTINGS
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'buckets', 'create-bucket', 'Create bucket', 'POST /storage/v1/bucket', 'https://supabase.com/docs/reference/javascript/storage-createbucket', 'P0', 'in_scope',
-        `supabase.storage.createBucket('avatars', { public: false, fileSizeLimit: 52428800 })`,
-        null,
-        `{ "data": "avatars", "error": null }`);
+    add('AUTH', 'settings', 'get-settings', 'Get project settings', 'GET /auth/v1/settings', null, 'P1', 'in_scope', null, null, null);
 
-    add('STORAGE', 'buckets', 'create-bucket-duplicate', 'Create bucket rejects duplicate', '400 Duplicate', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Bucket already exists", "code": "Duplicate", "status": 400 } }`);
+    // ═══════════════════════════════════════════════════════════
+    // AUTH — IDENTITIES (v2 scope)
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'buckets', 'update-bucket', 'Update bucket', 'PUT /storage/v1/bucket/{id}', 'https://supabase.com/docs/reference/javascript/storage-updatebucket', 'P0', 'in_scope',
-        `supabase.storage.updateBucket('avatars', { public: true })`,
-        null,
-        `{ "data": { "message": "Bucket updated" }, "error": null }`);
+    add('AUTH', 'identities', 'get-identities', 'Get user identities', 'Linked OAuth identities', 'https://supabase.com/docs/reference/javascript/auth-getuseridentities', 'P2', 'v2', null, null, null);
+    add('AUTH', 'identities', 'link-identity', 'Link OAuth identity', null, 'https://supabase.com/docs/reference/javascript/auth-linkidentity', 'P2', 'v2', null, null, null);
+    add('AUTH', 'identities', 'unlink-identity', 'Unlink identity', null, 'https://supabase.com/docs/reference/javascript/auth-unlinkidentity', 'P2', 'v2', null, null, null);
 
-    add('STORAGE', 'buckets', 'delete-bucket', 'Delete bucket', 'DELETE /storage/v1/bucket/{id}', 'https://supabase.com/docs/reference/javascript/storage-deletebucket', 'P0', 'in_scope',
-        `supabase.storage.deleteBucket('avatars')`,
-        null,
-        `{ "data": { "message": "Deleted" }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — BUCKETS
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'buckets', 'delete-bucket-not-empty', 'Delete rejects non-empty bucket', '400 BucketNotEmpty', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Bucket is not empty", "code": "BucketNotEmpty", "status": 400 } }`);
+    add('STORAGE', 'buckets', 'list-buckets', 'List all buckets', null, 'https://supabase.com/docs/reference/javascript/storage-listbuckets', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.listBuckets()`,
+        `CREATE TABLE storage_buckets(id TEXT PRIMARY KEY, name TEXT, owner TEXT, public INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, file_size_limit INTEGER, allowed_mime_types TEXT);`, null);
+    add('STORAGE', 'buckets', 'get-bucket', 'Retrieve a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-getbucket', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.getBucket('avatars')`, null, null);
+    add('STORAGE', 'buckets', 'create-bucket', 'Create a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-createbucket', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.createBucket('avatars', { public: false, fileSizeLimit: 52428800 })`, null, null);
+    add('STORAGE', 'buckets', 'create-bucket-duplicate', 'Create bucket rejects duplicate', '400 Duplicate', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'buckets', 'empty-bucket', 'Empty a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-emptybucket', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.emptyBucket('avatars')`, null, null);
+    add('STORAGE', 'buckets', 'update-bucket', 'Update a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-updatebucket', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.updateBucket('avatars', { public: true })`, null, null);
+    add('STORAGE', 'buckets', 'delete-bucket', 'Delete a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-deletebucket', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.deleteBucket('avatars')`, null, null);
+    add('STORAGE', 'buckets', 'delete-bucket-not-empty', 'Delete rejects non-empty bucket', '400 BucketNotEmpty', null, 'P0', 'in_scope', null, null, null);
 
-    add('STORAGE', 'buckets', 'empty-bucket', 'Empty bucket', 'POST /storage/v1/bucket/{id}/empty', 'https://supabase.com/docs/reference/javascript/storage-emptybucket', 'P0', 'in_scope',
-        `supabase.storage.emptyBucket('avatars')`,
-        null,
-        `{ "data": [{ "bucket_id": "avatars", "name": "avatar1.png" }], "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — OBJECTS: UPLOAD/UPDATE
+    // ═══════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Objects: Upload/Update
-    // ═══════════════════════════════════════════════════
+    add('STORAGE', 'objects', 'upload', 'Upload a file', null, 'https://supabase.com/docs/reference/javascript/storage-from-upload', 'P0', 'in_scope',
+        `const { data } = await supabase.storage.from('avatars').upload('user1/avatar.png', fileBody)`, null, null);
+    add('STORAGE', 'objects', 'upload-duplicate', 'Upload rejects existing file', '400 Duplicate', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'objects', 'upload-upsert', 'Upload with upsert', 'x-upsert: true', null, 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').upload('user1/avatar.png', fileBody, { upsert: true })`, null, null);
+    add('STORAGE', 'objects', 'update', 'Replace an existing file', null, 'https://supabase.com/docs/reference/javascript/storage-from-update', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').update('user1/avatar.png', newFileBody)`, null, null);
+    add('STORAGE', 'objects', 'update-not-found', 'Update rejects if file missing', '404 ObjectNotFound', null, 'P0', 'in_scope', null, null, null);
 
-    add('STORAGE', 'objects', 'upload', 'Upload file', 'POST /storage/v1/object/{bucket}', 'https://supabase.com/docs/reference/javascript/storage-from-upload', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').upload('user1/avatar.png', fileBody)`,
-        null,
-        `{ "data": { "path": "user1/avatar.png" }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — OBJECTS: MOVE/COPY
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'objects', 'upload-duplicate', 'Upload rejects existing file', '400 Duplicate without upsert', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "The resource already exists", "code": "Duplicate", "status": 400 } }`);
+    add('STORAGE', 'objects', 'move', 'Move an existing file', null, 'https://supabase.com/docs/reference/javascript/storage-from-move', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').move('old/path.png', 'new/path.png')`, null, null);
+    add('STORAGE', 'objects', 'copy', 'Copy an existing file', null, 'https://supabase.com/docs/reference/javascript/storage-from-copy', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').copy('src/path.png', 'dst/path.png')`, null, null);
 
-    add('STORAGE', 'objects', 'upload-upsert', 'Upload with upsert', 'x-upsert: true header', null, 'P0', 'in_scope',
-        `supabase.storage.from('avatars').upload('user1/avatar.png', fileBody, { upsert: true })`,
-        null,
-        `{ "data": { "path": "user1/avatar.png" }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — SIGNED URLS
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'objects', 'update', 'Update existing file', 'PUT /storage/v1/object/{bucket}', 'https://supabase.com/docs/reference/javascript/storage-from-update', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').update('user1/avatar.png', newFileBody)`,
-        null, null);
-
-    add('STORAGE', 'objects', 'update-not-found', 'Update rejects if file missing', '404 ObjectNotFound', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "The resource was not found", "code": "ObjectNotFound", "status": 404 } }`);
-
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Objects: Download/Remove
-    // ═══════════════════════════════════════════════════
-
-    add('STORAGE', 'objects', 'download', 'Download file', 'GET /storage/v1/object/{bucket}/{path}', 'https://supabase.com/docs/reference/javascript/storage-from-download', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').download('user1/avatar.png')`,
-        null,
-        `{ "data": Blob, "error": null }`);
-
-    add('STORAGE', 'objects', 'download-not-found', 'Download rejects missing file', '404 ObjectNotFound', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "The resource was not found", "code": "ObjectNotFound", "status": 404 } }`);
-
-    add('STORAGE', 'objects', 'remove', 'Remove files', 'DELETE /storage/v1/object/{bucket}', 'https://supabase.com/docs/reference/javascript/storage-from-remove', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').remove(['user1/avatar.png'])`,
-        null,
-        `{ "data": [{ "bucket_id": "avatars", "name": "user1/avatar.png" }], "error": null }`);
-
-    add('STORAGE', 'objects', 'exists', 'Check file exists (HEAD)', 'HEAD /storage/v1/object/{bucket}/{path}', 'https://supabase.com/docs/reference/javascript/storage-from-exists', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').exists('user1/avatar.png')`,
-        null,
-        `{ "data": true, "error": null }`);
-
-    add('STORAGE', 'objects', 'info', 'Get file info', 'POST /storage/v1/object/info/{bucket}/{path}', 'https://supabase.com/docs/reference/javascript/storage-from-info', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').info('user1/avatar.png')`,
-        null,
-        `{ "data": { "name": "avatar.png", "size": 1024, "mimetype": "image/png", "cacheControl": "3600", "lastModified": "2026-04-29T00:00:00Z", "eTag": "abc123" }, "error": null }`);
-
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Objects: Move/Copy
-    // ═══════════════════════════════════════════════════
-
-    add('STORAGE', 'objects', 'move', 'Move file', 'POST /storage/v1/object/{bucket}/move', 'https://supabase.com/docs/reference/javascript/storage-from-move', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').move('old/path.png', 'new/path.png')`,
-        null,
-        `{ "data": { "message": "move object" }, "error": null }`);
-
-    add('STORAGE', 'objects', 'copy', 'Copy file', 'POST /storage/v1/object/{bucket}/copy', 'https://supabase.com/docs/reference/javascript/storage-from-copy', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').copy('src/path.png', 'dst/path.png')`,
-        null,
-        `{ "data": { "path": "dst/path.png" }, "error": null }`);
-
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Objects: List
-    // ═══════════════════════════════════════════════════
-
-    add('STORAGE', 'objects', 'list', 'List objects (offset pagination)', 'POST /storage/v1/object/{bucket}/list', 'https://supabase.com/docs/reference/javascript/storage-from-list', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').list('user1/', { limit: 10, offset: 0 })`,
-        null,
-        `{ "data": [{ "name": "avatar.png", "id": "uuid", "updated_at": "...", "created_at": "...", "last_accessed_at": "...", "metadata": {} }], "error": null }`);
-
-    add('STORAGE', 'objects', 'listV2', 'List objects V2 (cursor pagination)', 'POST /storage/v1/object/{bucket}/list/v2', 'https://supabase.com/docs/reference/javascript/storage-from-listv2', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').listV2({ prefix: 'user1/', cursor: null })`,
-        null,
-        `{ "data": { "objects": [...], "folders": [...], "hasNext": false, "nextCursor": null }, "error": null }`);
-
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Signed URLs
-    // ═══════════════════════════════════════════════════
-
-    add('STORAGE', 'signed-urls', 'create-signed-url', 'Create signed download URL', 'POST /storage/v1/object/sign/{bucket}', 'https://supabase.com/docs/reference/javascript/storage-from-createsignedurl', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').createSignedUrl('user1/avatar.png', 600)`,
-        null,
-        `{ "data": { "signedURL": "/storage/v1/object/sign/avatars/user1/avatar.png?token=..." }, "error": null }`);
-
-    add('STORAGE', 'signed-urls', 'create-signed-urls', 'Create multiple signed URLs', 'POST /storage/v1/object/signatures', 'https://supabase.com/docs/reference/javascript/storage-from-createsignedurls', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').createSignedUrls(['file1.png','file2.png'], 600)`,
-        null,
-        `{ "data": [{ "path": "file1.png", "signedURL": "..." }, { "path": "file2.png", "signedURL": "..." }], "error": null }`);
-
-    add('STORAGE', 'signed-urls', 'signed-url-expired', 'Signed URL rejects when expired', '400 InvalidToken', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Token has expired", "code": "InvalidToken", "status": 400 } }`);
-
+    add('STORAGE', 'signed-urls', 'create-signed-url', 'Create a signed URL', null, 'https://supabase.com/docs/reference/javascript/storage-from-createsignedurl', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').createSignedUrl('user1/avatar.png', 600)`, null, null);
+    add('STORAGE', 'signed-urls', 'create-signed-urls', 'Create signed URLs (batch)', null, 'https://supabase.com/docs/reference/javascript/storage-from-createsignedurls', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').createSignedUrls(['f1.png','f2.png'], 600)`, null, null);
+    add('STORAGE', 'signed-urls', 'signed-url-expired', 'Signed URL rejects when expired', '400 InvalidToken', null, 'P0', 'in_scope', null, null, null);
     add('STORAGE', 'signed-urls', 'signed-url-wrong-sig', 'Signed URL rejects bad signature', '400 InvalidToken', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'signed-urls', 'create-signed-upload-url', 'Create signed upload URL', null, 'https://supabase.com/docs/reference/javascript/storage-from-createsigneduploadurl', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').createSignedUploadUrl('user1/avatar.png')`, null, null);
+    add('STORAGE', 'signed-urls', 'upload-to-signed-url', 'Upload to a signed URL', null, 'https://supabase.com/docs/reference/javascript/storage-from-uploadtosignedurl', 'P0', 'in_scope', null, null, null);
 
-    add('STORAGE', 'signed-urls', 'create-signed-upload-url', 'Create signed upload URL', 'POST /storage/v1/upload/resumable', 'https://supabase.com/docs/reference/javascript/storage-from-createsigneduploadurl', 'P0', 'in_scope',
-        `supabase.storage.from('avatars').createSignedUploadUrl('user1/avatar.png')`,
-        null,
-        `{ "data": { "url": "/storage/v1/upload/resumable", "token": "..." }, "error": null }`);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — PUBLIC / DOWNLOAD
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'signed-urls', 'upload-to-signed-url', 'Upload via signed URL', 'PUT /storage/v1/upload/resumable', 'https://supabase.com/docs/reference/javascript/storage-from-uploadtosignedurl', 'P0', 'in_scope',
-        `// PUT /storage/v1/upload/resumable with x-upsert-token header`,
-        null,
-        `{ "data": { "path": "user1/avatar.png" }, "error": null }`);
+    add('STORAGE', 'public', 'get-public-url', 'Retrieve public URL', 'Sync URL construction', 'https://supabase.com/docs/reference/javascript/storage-from-getpublicurl', 'P1', 'in_scope',
+        `const { data } = supabase.storage.from('avatars').getPublicUrl('user1/avatar.png')`, null, null);
+    add('STORAGE', 'objects', 'download', 'Download a file', null, 'https://supabase.com/docs/reference/javascript/storage-from-download', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').download('user1/avatar.png')`, null, null);
+    add('STORAGE', 'objects', 'download-not-found', 'Download rejects missing file', '404 ObjectNotFound', null, 'P0', 'in_scope', null, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Public URLs
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — REMOVE / LIST
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'public', 'get-public-url', 'Get public URL (client-side)', 'Sync URL construction', 'https://supabase.com/docs/reference/javascript/storage-from-getpublicurl', 'P1', 'in_scope',
-        `supabase.storage.from('avatars').getPublicUrl('user1/avatar.png')`,
-        null,
-        `{ "data": { "publicUrl": "https://base/storage/v1/object/public/avatars/user1/avatar.png" } }`);
+    add('STORAGE', 'objects', 'remove', 'Delete files in a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-from-remove', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').remove(['user1/avatar.png'])`, null, null);
+    add('STORAGE', 'objects', 'list', 'List all files in a bucket', null, 'https://supabase.com/docs/reference/javascript/storage-from-list', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').list('user1/', { limit: 10, offset: 0 })`, null, null);
+    add('STORAGE', 'objects', 'exists', 'Check if file exists', null, 'https://supabase.com/docs/reference/javascript/storage-from-exists', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').exists('user1/avatar.png')`, null, null);
+    add('STORAGE', 'objects', 'info', 'Get file metadata', null, 'https://supabase.com/docs/reference/javascript/storage-from-info', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').info('user1/avatar.png')`, null, null);
+    add('STORAGE', 'objects', 'listV2', 'List files (v2) — cursor pagination', null, 'https://supabase.com/docs/reference/javascript/storage-from-listv2', 'P0', 'in_scope',
+        `await supabase.storage.from('avatars').listV2({ prefix: 'user1/', cursor: null })`, null, null);
 
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Access Control
-    // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — UTILITY
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'access-control', 'public-bucket-read', 'Public bucket: anon read', 'Anon can read/list public buckets', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'public', 'to-base64', 'Convert file to base64', 'Sync, client-side only', 'https://supabase.com/docs/reference/javascript/storage-from-tobase64', 'P2', 'in_scope',
+        `const { data } = await supabase.storage.from('avatars').toBase64('user1/avatar.png')`, null, null);
 
-    add('STORAGE', 'access-control', 'private-bucket-read-denied', 'Private bucket: anon denied', 'Anon cannot read private', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "Permission denied", "code": "PermissionDenied", "status": 403 } }`);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — ACCESS CONTROL
+    // ═══════════════════════════════════════════════════════════
 
-    add('STORAGE', 'access-control', 'owner-access', 'Owner can access own files', 'Authenticated owner access', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'access-control', 'public-bucket-read', 'Public bucket: anon read access', null, null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'access-control', 'private-bucket-read-denied', 'Private bucket: anon denied', '403 PermissionDenied', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'access-control', 'owner-access', 'Owner can access own files', null, null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'access-control', 'service-role-bypass', 'service_role bypasses all storage ACL', null, null, 'P0', 'in_scope', null, null, null);
 
-    add('STORAGE', 'access-control', 'service-role-bypass', 'service_role bypasses all storage ACL', 'service_role = full access', null, 'P0', 'in_scope', null, null, null);
+    // ═══════════════════════════════════════════════════════════
+    // STORAGE — VALIDATION
+    // ═══════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════
-    // STORAGE — Validation
-    // ═══════════════════════════════════════════════════
-
-    add('STORAGE', 'validation', 'size-limit', 'Reject upload exceeding size limit', '413 SizeLimitExceeded', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "File size exceeds limit", "code": "SizeLimitExceeded", "status": 413 } }`);
-
-    add('STORAGE', 'validation', 'mime-validation', 'Reject disallowed MIME type', '422 MimeTypeNotAllowed', null, 'P0', 'in_scope', null, null,
-        `{ "data": null, "error": { "message": "MIME type not allowed", "code": "MimeTypeNotAllowed", "status": 422 } }`);
-
-    add('STORAGE', 'validation', 'path-validation', 'Validate file path format', 'No leading slash, no empty segments', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'validation', 'size-limit', 'Reject upload exceeding size limit', '413 SizeLimitExceeded', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'validation', 'mime-validation', 'Reject disallowed MIME type', '422 MimeTypeNotAllowed', null, 'P0', 'in_scope', null, null, null);
+    add('STORAGE', 'validation', 'path-validation', 'Validate file path format', null, null, 'P0', 'in_scope', null, null, null);
 
     console.log(`\n✓ Seeded ${count} tests into test catalog`);
 }
